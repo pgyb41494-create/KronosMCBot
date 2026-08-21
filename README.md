@@ -6,7 +6,9 @@ The bot presence is set to:
 
 `KRONOS NETWORK | @KronosMC`
 
-Commands are registered as stubs for now. They reply that they are not active yet.
+`/ip` is live. The other slash commands are still stubs.
+
+If someone DMs the bot `kronosmcCT`, it replies with a claim embed for the **Kronos +** rank.
 
 Slash commands are **per server**, not global. On startup the bot removes global commands and resets the command list in every guild it is in. When it joins a new server, it registers commands there immediately.
 
@@ -22,8 +24,9 @@ Slash commands are **per server**, not global. On startup the bot removes global
 ## Setup
 
 1. Copy `.env.example` to `.env` and add your Discord bot token.
-2. Invite the bot to your Discord server with the `applications.commands` and `bot` scopes.
-3. Install dependencies and start the bot:
+2. In the Discord Developer Portal, enable the **Message Content Intent**.
+3. Invite the bot with the `applications.commands` and `bot` scopes.
+4. Install dependencies and start the bot:
 
 ```bash
 npm install

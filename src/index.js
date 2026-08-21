@@ -2,9 +2,10 @@ require('dotenv').config();
 
 const fs = require('node:fs');
 const path = require('node:path');
-const { Client, Collection, Events, GatewayIntentBits, ActivityType } = require('discord.js');
+const { Client, Collection, Events, GatewayIntentBits, Partials, ActivityType } = require('discord.js');
 const { botStatus } = require('./config');
 const { loadCommandData, resetCommandsForAllGuilds, resetGuildCommands } = require('./registerCommands');
+const { registerDirectMessageHandler } = require('./directMessages');
 
 const token = process.env.DISCORD_TOKEN;
 
@@ -14,7 +15,12 @@ if (!token) {
 }
 
 const client = new Client({
-  intents: [GatewayIntentBits.Guilds],
+  intents: [
+    GatewayIntentBits.Guilds,
+    GatewayIntentBits.DirectMessages,
+    GatewayIntentBits.MessageContent,
+  ],
+  partials: [Partials.Channel, Partials.Message],
 });
 
 client.commands = new Collection();
@@ -63,6 +69,8 @@ client.on(Events.GuildCreate, async (guild) => {
     console.error(`Failed to reset commands for ${guild.id}:`, error);
   }
 });
+
+registerDirectMessageHandler(client);
 
 client.on(Events.InteractionCreate, async (interaction) => {
   if (!interaction.isChatInputCommand()) return;
