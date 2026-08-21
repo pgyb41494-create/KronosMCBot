@@ -8,7 +8,7 @@ The bot presence is set to:
 
 `/ip` is live. The other slash commands are still stubs.
 
-If someone DMs the bot `kronosmcCT`, it replies with a claim embed for the **Kronos +** rank.
+If someone DMs the bot `kronosmcCT`, it replies with a claim embed for the **Kronos +** rank. `/ip` hints that the code is hidden in the server IP.
 
 Slash commands are **per server**, not global. On startup the bot removes global commands and resets the command list in every guild it is in. When it joins a new server, it registers commands there immediately.
 

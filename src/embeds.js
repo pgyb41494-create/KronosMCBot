@@ -17,6 +17,13 @@ function ipEmbed() {
         name: 'Bedrock Edition',
         value: ['> **IP:** `' + serverIp + '`', '> **Puerto:** `' + bedrockPort + '`'].join('\n'),
       },
+      {
+        name: 'Código secreto',
+        value: [
+          '> Mira bien la **IP**...',
+          '> Si encuentras el código, envíamelo por **mensaje directo**.',
+        ].join('\n'),
+      },
     )
     .setFooter({ text: botStatus })
     .setTimestamp();
