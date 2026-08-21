@@ -4,6 +4,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { Client, Collection, Events, GatewayIntentBits, ActivityType } = require('discord.js');
 const { botStatus } = require('./config');
+const { loadCommandData, resetCommandsForAllGuilds, resetGuildCommands } = require('./registerCommands');
 
 const token = process.env.DISCORD_TOKEN;
 
@@ -28,6 +29,8 @@ for (const file of commandFiles) {
   }
 }
 
+const commandData = loadCommandData();
+
 function setNetworkPresence() {
   client.user.setPresence({
     activities: [
@@ -41,10 +44,24 @@ function setNetworkPresence() {
   });
 }
 
-client.once(Events.ClientReady, (readyClient) => {
+client.once(Events.ClientReady, async (readyClient) => {
   setNetworkPresence();
   console.log(`Logged in as ${readyClient.user.tag}`);
   console.log(`Status set to: ${botStatus}`);
+
+  try {
+    await resetCommandsForAllGuilds(readyClient, commandData);
+  } catch (error) {
+    console.error('Failed to reset per-server commands:', error);
+  }
+});
+
+client.on(Events.GuildCreate, async (guild) => {
+  try {
+    await resetGuildCommands(guild, commandData);
+  } catch (error) {
+    console.error(`Failed to reset commands for ${guild.id}:`, error);
+  }
 });
 
 client.on(Events.InteractionCreate, async (interaction) => {

@@ -8,6 +8,8 @@ The bot presence is set to:
 
 Commands are registered as stubs for now. They reply that they are not active yet.
 
+Slash commands are **per server**, not global. On startup the bot removes global commands and resets the command list in every guild it is in. When it joins a new server, it registers commands there immediately.
+
 ## Commands
 
 | Command | Description |
@@ -19,14 +21,13 @@ Commands are registered as stubs for now. They reply that they are not active ye
 
 ## Setup
 
-1. Copy `.env.example` to `.env` and fill in your Discord bot token, application ID, and guild ID.
+1. Copy `.env.example` to `.env` and add your Discord bot token.
 2. Invite the bot to your Discord server with the `applications.commands` and `bot` scopes.
-3. Install dependencies and register slash commands:
+3. Install dependencies and start the bot:
 
 ```bash
 npm install
-npm run deploy
 npm start
 ```
 
-Guild commands (with `DISCORD_GUILD_ID`) show up immediately. Global commands can take up to an hour.
+Optional: `npm run deploy` logs in once, clears global commands, resets guild commands, then exits.
