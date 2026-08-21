@@ -2,10 +2,9 @@
   "name": "kronos-mc-bot",
   "version": "0.1.0",
   "description": "Discord bot for Kronos Network / KronosMC",
-  "main": "src/index.js",
+  "main": "bot.js",
   "scripts": {
-    "start": "node src/index.js",
-    "deploy": "node src/deploy-commands.js"
+    "start": "node bot.js"
   },
   "engines": {
     "node": ">=18"

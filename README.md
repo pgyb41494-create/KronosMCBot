@@ -23,7 +23,9 @@ Slash commands are **per server**, not global. On startup the bot removes global
 
 ## Setup
 
-1. Copy `.env.example` to `.env`. Put **only** the Bot Token in `DISCORD_TOKEN`. Do not add Application ID, Public Key, or Guild ID.
+The whole bot is `bot.js`. **Never paste the token, Application ID, or Client ID into that file.**
+
+1. Copy `.env.example` to `.env`. Put **only** the Bot Token in `DISCORD_TOKEN`.
 2. In the Discord Developer Portal, enable the **Message Content Intent**.
 3. Invite the bot with the `applications.commands` and `bot` scopes.
 4. Install dependencies and start the bot:
@@ -32,5 +34,3 @@ Slash commands are **per server**, not global. On startup the bot removes global
 npm install
 npm start
 ```
-
-Optional: `npm run deploy` logs in once, clears global commands, resets guild commands, then exits.
