@@ -23,7 +23,7 @@ Slash commands are **per server**, not global. On startup the bot removes global
 
 ## Setup
 
-1. Copy `.env.example` to `.env` and add your Discord bot token.
+1. Copy `.env.example` to `.env`. Put **only** the Bot Token in `DISCORD_TOKEN`. Do not add Application ID, Public Key, or Guild ID.
 2. In the Discord Developer Portal, enable the **Message Content Intent**.
 3. Invite the bot with the `applications.commands` and `bot` scopes.
 4. Install dependencies and start the bot:
