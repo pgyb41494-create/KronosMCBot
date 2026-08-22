@@ -69,14 +69,30 @@ function emptyPanel(name) {
     sendChannelId: null,
     categoryId: null,
     auditLogChannelId: null,
-    staffRoleId: null,
+    staffRoleIds: [],
     messageId: null,
   };
 }
 
 function getPanel(guildId, name) {
   const { store } = guildStore(guildId);
-  return store.panels[slug(name)] || null;
+  const panel = store.panels[slug(name)] || null;
+  if (!panel) return null;
+  if (!Array.isArray(panel.staffRoleIds)) {
+    panel.staffRoleIds = panel.staffRoleId ? [panel.staffRoleId] : [];
+  }
+  return panel;
+}
+
+function staffIds(panel) {
+  if (Array.isArray(panel.staffRoleIds) && panel.staffRoleIds.length) return panel.staffRoleIds;
+  if (panel.staffRoleId) return [panel.staffRoleId];
+  return [];
+}
+
+function staffMentions(panel) {
+  const ids = staffIds(panel);
+  return ids.length ? ids.map((id) => `<@&${id}>`).join(' ') : 'sin asignar';
 }
 
 function savePanel(guildId, panel) {
@@ -160,7 +176,7 @@ function setupListEmbed(store) {
     .setDescription(
       names.length
         ? 'Usa el menú de abajo para elegir un panel y configurarlo paso a paso.'
-        : 'No hay paneles todavía. Crea uno con `/ticket crear`.',
+        : 'No hay paneles todavía. Crea uno con `/ticket`.',
     );
 
   if (names.length) {
@@ -174,6 +190,7 @@ function setupListEmbed(store) {
             `> Canal: ${panel.sendChannelId ? `<#${panel.sendChannelId}>` : 'sin asignar'}`,
             `> Categoría: ${panel.categoryId ? `<#${panel.categoryId}>` : 'sin asignar'}`,
             `> Registro: ${panel.auditLogChannelId ? `<#${panel.auditLogChannelId}>` : 'sin asignar'}`,
+            `> Equipo: ${staffMentions(panel)}`,
           ].join('\n'),
         };
       }),
@@ -201,35 +218,46 @@ function setupSelectRow(store) {
   );
 }
 
+const LAST_SETUP_STEP = 8;
 const SETUP_STEPS = [
   {
     id: 1,
-    title: 'Paso 1 de 6 · Canal del mensaje',
+    title: 'Paso 1 de 8 · Canal del mensaje',
     hint: 'Elige dónde se envía el panel de tickets.',
   },
   {
     id: 2,
-    title: 'Paso 2 de 6 · Categoría',
+    title: 'Paso 2 de 8 · Categoría',
     hint: 'Los tickets nuevos se abrirán en esta categoría.',
   },
   {
     id: 3,
-    title: 'Paso 3 de 6 · Registro',
+    title: 'Paso 3 de 8 · Registro',
     hint: 'Canal de registro de todos los tickets (abrir y cerrar).',
   },
   {
     id: 4,
-    title: 'Paso 4 de 6 · Equipo',
-    hint: 'Rol que puede ver y atender los tickets.',
+    title: 'Paso 4 de 8 · Equipo',
+    hint: 'Puedes elegir más de un rol. Esos roles verán los tickets.',
   },
   {
     id: 5,
-    title: 'Paso 5 de 6 · Editar mensaje',
+    title: 'Paso 5 de 8 · Editar mensaje',
     hint: 'Cambia título, cuerpo, pie e imágenes.',
   },
   {
     id: 6,
-    title: 'Paso 6 de 6 · Republicar',
+    title: 'Paso 6 de 8 · Botones',
+    hint: 'Añade botones que abren un ticket. Máximo 5.',
+  },
+  {
+    id: 7,
+    title: 'Paso 7 de 8 · Menú desplegable',
+    hint: 'Añade un dropdown con opciones que abren un ticket.',
+  },
+  {
+    id: 8,
+    title: 'Paso 8 de 8 · Republicar',
     hint: 'Revisa todo y publica el panel otra vez con la nueva configuración.',
   },
 ];
@@ -240,7 +268,7 @@ function panelSummary(panel) {
     `> **Canal:** ${panel.sendChannelId ? `<#${panel.sendChannelId}>` : 'sin asignar'}`,
     `> **Categoría:** ${panel.categoryId ? `<#${panel.categoryId}>` : 'sin asignar'}`,
     `> **Registro:** ${panel.auditLogChannelId ? `<#${panel.auditLogChannelId}>` : 'sin asignar'}`,
-    `> **Equipo:** ${panel.staffRoleId ? `<@&${panel.staffRoleId}>` : 'sin asignar'}`,
+    `> **Equipo:** ${staffMentions(panel)}`,
   ].join('\n');
 }
 
@@ -252,7 +280,7 @@ function wizardNav(panel, step) {
       .setLabel('Atrás')
       .setStyle(ButtonStyle.Secondary),
   );
-  if (step < 6) {
+  if (step < LAST_SETUP_STEP) {
     row.addComponents(
       new ButtonBuilder()
         .setCustomId(`tksetup_next:${panel.name}:${step}`)
@@ -317,7 +345,9 @@ function wizardPayload(panel, step) {
       new ActionRowBuilder().addComponents(
         new RoleSelectMenuBuilder()
           .setCustomId(`tksetup_staff:${panel.name}`)
-          .setPlaceholder('Rol del equipo que ve los tickets'),
+          .setPlaceholder('Roles del equipo que ven los tickets')
+          .setMinValues(0)
+          .setMaxValues(25),
       ),
     );
   }
@@ -333,10 +363,71 @@ function wizardPayload(panel, step) {
     );
   }
 
+  if (step === 6) {
+    rows.push(
+      new ActionRowBuilder().addComponents(
+        new ButtonBuilder()
+          .setCustomId(`tksetup_addbtn:${panel.name}`)
+          .setLabel('Añadir botón')
+          .setStyle(ButtonStyle.Primary),
+        new ButtonBuilder()
+          .setCustomId(`tksetup_clearbtn:${panel.name}`)
+          .setLabel('Borrar botones')
+          .setStyle(ButtonStyle.Danger),
+      ),
+    );
+  }
+
+  if (step === 7) {
+    rows.push(
+      new ActionRowBuilder().addComponents(
+        new ButtonBuilder()
+          .setCustomId(`tksetup_editmenu:${panel.name}`)
+          .setLabel('Texto del menú')
+          .setStyle(ButtonStyle.Secondary),
+        new ButtonBuilder()
+          .setCustomId(`tksetup_addopt:${panel.name}`)
+          .setLabel('Añadir opción')
+          .setStyle(ButtonStyle.Primary),
+        new ButtonBuilder()
+          .setCustomId(`tksetup_clearmenu:${panel.name}`)
+          .setLabel('Borrar menú')
+          .setStyle(ButtonStyle.Danger),
+      ),
+    );
+  }
+
   rows.push(wizardNav(panel, step));
 
   const embeds = [embed];
-  if (step === 5 || step === 6) embeds.push(panelEmbed(panel));
+  if (step === 5 || step === 8) embeds.push(panelEmbed(panel));
+  if (step === 6) {
+    embeds.push(
+      new EmbedBuilder()
+        .setColor(GOLD)
+        .setTitle('Botones actuales')
+        .setDescription(
+          panel.buttons?.length
+            ? panel.buttons.map((button, index) => `> ${index + 1}. **${button.label}** (${button.style})`).join('\n')
+            : '> No hay botones todavía.',
+        ),
+    );
+  }
+  if (step === 7) {
+    embeds.push(
+      new EmbedBuilder()
+        .setColor(GOLD)
+        .setTitle('Menú desplegable')
+        .setDescription(
+          [
+            `> Placeholder: **${panel.dropdown?.placeholder || 'Selecciona una opción'}**`,
+            panel.dropdown?.options?.length
+              ? panel.dropdown.options.map((option, index) => `> ${index + 1}. ${option.label}`).join('\n')
+              : '> No hay opciones todavía.',
+          ].join('\n'),
+        ),
+    );
+  }
 
   return { embeds, components: rows };
 }
@@ -366,10 +457,6 @@ function ticketActionRow() {
         { label: 'Crear panel', value: 'crear', description: 'Nuevo panel de tickets' },
         { label: 'Editar mensaje', value: 'mensaje', description: 'Título, cuerpo, pie e imágenes' },
         { label: 'Añadir campo', value: 'campo', description: 'Un field extra en el embed' },
-        { label: 'Añadir botón', value: 'boton', description: 'Botón que abre un ticket' },
-        { label: 'Menú desplegable', value: 'menu', description: 'Texto del dropdown' },
-        { label: 'Añadir opción', value: 'opcion', description: 'Opción del menú desplegable' },
-        { label: 'Destinos', value: 'destinos', description: 'Canal, categoría, registro y equipo' },
         { label: 'Vista previa', value: 'vista', description: 'Ver cómo queda el panel' },
         { label: 'Borrar panel', value: 'borrar', description: 'Eliminar un panel' },
         { label: 'Lista', value: 'lista', description: 'Ver todos los paneles' },
@@ -439,7 +526,7 @@ function campoModal(name) {
 
 function botonModal(name) {
   return new ModalBuilder()
-    .setCustomId(`tkt_boton:${name}`)
+    .setCustomId(`tksetup_boton:${name}`)
     .setTitle('Añadir botón')
     .addComponents(
       new ActionRowBuilder().addComponents(textInput('texto', 'Texto del botón', TextInputStyle.Short, '', 80, true)),
@@ -450,7 +537,7 @@ function botonModal(name) {
 
 function menuModal(name, current) {
   return new ModalBuilder()
-    .setCustomId(`tkt_menu:${name}`)
+    .setCustomId(`tksetup_menu:${name}`)
     .setTitle('Menú desplegable')
     .addComponents(
       new ActionRowBuilder().addComponents(
@@ -461,7 +548,7 @@ function menuModal(name, current) {
 
 function opcionModal(name) {
   return new ModalBuilder()
-    .setCustomId(`tkt_opcion:${name}`)
+    .setCustomId(`tksetup_opcion:${name}`)
     .setTitle('Añadir opción')
     .addComponents(
       new ActionRowBuilder().addComponents(textInput('texto', 'Texto', TextInputStyle.Short, '', 100, true)),
@@ -541,9 +628,9 @@ async function openTicket(interaction, panel, reason) {
     },
   ];
 
-  if (panel.staffRoleId) {
+  for (const roleId of staffIds(panel)) {
     overwrites.push({
-      id: panel.staffRoleId,
+      id: roleId,
       allow: [
         PermissionsBitField.Flags.ViewChannel,
         PermissionsBitField.Flags.SendMessages,
@@ -568,7 +655,7 @@ async function openTicket(interaction, panel, reason) {
   );
 
   await channel.send({
-    content: `${interaction.user}${panel.staffRoleId ? ` | <@&${panel.staffRoleId}>` : ''}`,
+    content: `${interaction.user}${staffIds(panel).length ? ` | ${staffMentions(panel)}` : ''}`,
     embeds: [
       new EmbedBuilder()
         .setColor(panel.color || GOLD)
@@ -709,22 +796,6 @@ async function handleTicketInteraction(interaction) {
       await interaction.showModal(campoModal(panel.name));
       return true;
     }
-    if (action === 'boton') {
-      await interaction.showModal(botonModal(panel.name));
-      return true;
-    }
-    if (action === 'menu') {
-      await interaction.showModal(menuModal(panel.name, panel.dropdown.placeholder));
-      return true;
-    }
-    if (action === 'opcion') {
-      await interaction.showModal(opcionModal(panel.name));
-      return true;
-    }
-    if (action === 'destinos') {
-      await interaction.update(wizardPayload(panel, 1));
-      return true;
-    }
     if (action === 'vista') {
       await interaction.update({
         content: null,
@@ -782,7 +853,7 @@ async function handleTicketInteraction(interaction) {
     return true;
   }
 
-  if (interaction.isModalSubmit() && interaction.customId.startsWith('tkt_boton:')) {
+  if (interaction.isModalSubmit() && interaction.customId.startsWith('tksetup_boton:')) {
     const panel = getPanel(interaction.guildId, interaction.customId.split(':')[1]);
     if (!panel) {
       await interaction.reply({ content: 'Ese panel ya no existe.', ephemeral: true });
@@ -799,11 +870,11 @@ async function handleTicketInteraction(interaction) {
       emoji: interaction.fields.getTextInputValue('emoji') || '',
     });
     savePanel(interaction.guildId, panel);
-    await interaction.reply({ content: `Botón añadido a \`${panel.name}\`.`, ephemeral: true });
+    await interaction.update(wizardPayload(panel, 6));
     return true;
   }
 
-  if (interaction.isModalSubmit() && interaction.customId.startsWith('tkt_menu:')) {
+  if (interaction.isModalSubmit() && interaction.customId.startsWith('tksetup_menu:')) {
     const panel = getPanel(interaction.guildId, interaction.customId.split(':')[1]);
     if (!panel) {
       await interaction.reply({ content: 'Ese panel ya no existe.', ephemeral: true });
@@ -812,11 +883,11 @@ async function handleTicketInteraction(interaction) {
     panel.dropdown.placeholder =
       interaction.fields.getTextInputValue('texto_menu') || panel.dropdown.placeholder;
     savePanel(interaction.guildId, panel);
-    await interaction.reply({ content: `Menú de \`${panel.name}\` actualizado.`, ephemeral: true });
+    await interaction.update(wizardPayload(panel, 7));
     return true;
   }
 
-  if (interaction.isModalSubmit() && interaction.customId.startsWith('tkt_opcion:')) {
+  if (interaction.isModalSubmit() && interaction.customId.startsWith('tksetup_opcion:')) {
     const panel = getPanel(interaction.guildId, interaction.customId.split(':')[1]);
     if (!panel) {
       await interaction.reply({ content: 'Ese panel ya no existe.', ephemeral: true });
@@ -832,7 +903,7 @@ async function handleTicketInteraction(interaction) {
       emoji: interaction.fields.getTextInputValue('emoji') || '',
     });
     savePanel(interaction.guildId, panel);
-    await interaction.reply({ content: `Opción añadida al menú de \`${panel.name}\`.`, ephemeral: true });
+    await interaction.update(wizardPayload(panel, 7));
     return true;
   }
 
@@ -853,7 +924,7 @@ async function handleTicketInteraction(interaction) {
       await interaction.reply({ content: 'Ese panel ya no existe.', ephemeral: true });
       return true;
     }
-    const next = Math.min(6, Number(stepText) + 1);
+    const next = Math.min(LAST_SETUP_STEP, Number(stepText) + 1);
     await interaction.update(wizardPayload(panel, next));
     return true;
   }
@@ -908,9 +979,64 @@ async function handleTicketInteraction(interaction) {
       await interaction.reply({ content: 'Ese panel ya no existe.', ephemeral: true });
       return true;
     }
-    panel.staffRoleId = interaction.values[0];
+    panel.staffRoleIds = interaction.values;
+    delete panel.staffRoleId;
     savePanel(interaction.guildId, panel);
     await interaction.update(wizardPayload(panel, 4));
+    return true;
+  }
+
+  if (interaction.isButton() && interaction.customId.startsWith('tksetup_addbtn:')) {
+    const panel = getPanel(interaction.guildId, interaction.customId.split(':')[1]);
+    if (!panel) {
+      await interaction.reply({ content: 'Ese panel ya no existe.', ephemeral: true });
+      return true;
+    }
+    await interaction.showModal(botonModal(panel.name));
+    return true;
+  }
+
+  if (interaction.isButton() && interaction.customId.startsWith('tksetup_clearbtn:')) {
+    const panel = getPanel(interaction.guildId, interaction.customId.split(':')[1]);
+    if (!panel) {
+      await interaction.reply({ content: 'Ese panel ya no existe.', ephemeral: true });
+      return true;
+    }
+    panel.buttons = [];
+    savePanel(interaction.guildId, panel);
+    await interaction.update(wizardPayload(panel, 6));
+    return true;
+  }
+
+  if (interaction.isButton() && interaction.customId.startsWith('tksetup_addopt:')) {
+    const panel = getPanel(interaction.guildId, interaction.customId.split(':')[1]);
+    if (!panel) {
+      await interaction.reply({ content: 'Ese panel ya no existe.', ephemeral: true });
+      return true;
+    }
+    await interaction.showModal(opcionModal(panel.name));
+    return true;
+  }
+
+  if (interaction.isButton() && interaction.customId.startsWith('tksetup_editmenu:')) {
+    const panel = getPanel(interaction.guildId, interaction.customId.split(':')[1]);
+    if (!panel) {
+      await interaction.reply({ content: 'Ese panel ya no existe.', ephemeral: true });
+      return true;
+    }
+    await interaction.showModal(menuModal(panel.name, panel.dropdown.placeholder));
+    return true;
+  }
+
+  if (interaction.isButton() && interaction.customId.startsWith('tksetup_clearmenu:')) {
+    const panel = getPanel(interaction.guildId, interaction.customId.split(':')[1]);
+    if (!panel) {
+      await interaction.reply({ content: 'Ese panel ya no existe.', ephemeral: true });
+      return true;
+    }
+    panel.dropdown = { placeholder: 'Selecciona una opción', options: [] };
+    savePanel(interaction.guildId, panel);
+    await interaction.update(wizardPayload(panel, 7));
     return true;
   }
 

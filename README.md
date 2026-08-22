@@ -21,7 +21,7 @@ Slash commands are **per server**, not global. On startup the bot removes global
 | `/estado` | Set status: activo, inactivo, no molestar |
 | `/kronoschito` | Internal command (code + rank, not wired yet) |
 | `/ticket` | Abre un menú para crear, editar, borrar o ver paneles |
-| `/ticketsetup` | Envía un embed con todos los paneles; elige uno y configúralo paso a paso, luego **Republicar** |
+| `/ticketsetup` | Configura canal, categoría, varios roles de staff, botones, menú y **Republicar** |
 
 ## Setup
 
