@@ -33,6 +33,7 @@ const IP = 'kronosmcct.xyz';
 const BEDROCK_PORT = '25569';
 const CLAIM_CODE = 'kronosmcCT';
 const GOLD = 0xE6B325;
+let botOnlineStatus = 'online';
 
 const client = new Client({
   intents: [
@@ -52,7 +53,7 @@ const commands = [
     .setDescription('Muestra el enlace de la tienda de Kronos Network.'),
   new SlashCommandBuilder()
     .setName('estado')
-    .setDescription('Cambia tu estado: activo, inactivo o no molestar.')
+    .setDescription('Cambia el estado del bot: activo, inactivo o no molestar.')
     .addStringOption((option) =>
       option
         .setName('modo')
@@ -118,15 +119,21 @@ function claimEmbed() {
     .setTimestamp();
 }
 
+function setBotPresence() {
+  if (!client.user) return;
+  client.user.setPresence({
+    activities: [{ name: STATUS, type: ActivityType.Playing }],
+    status: botOnlineStatus,
+  });
+}
+
 async function resetCommands(guild) {
   await guild.commands.set(commands);
 }
 
 client.once(Events.ClientReady, async () => {
-  client.user.setPresence({
-    activities: [{ name: STATUS, type: ActivityType.Custom, state: STATUS }],
-    status: 'online',
-  });
+  botOnlineStatus = 'online';
+  setBotPresence();
 
   await client.application.commands.set([]);
 
@@ -134,7 +141,11 @@ client.once(Events.ClientReady, async () => {
     await resetCommands(guild);
   }
 
+  setBotPresence();
+  setInterval(setBotPresence, 10 * 60 * 1000);
+
   console.log(`Logged in as ${client.user.tag}`);
+  console.log(`Status: online | ${STATUS}`);
 });
 
 client.on(Events.GuildCreate, async (guild) => {
@@ -163,6 +174,19 @@ client.on(Events.InteractionCreate, async (interaction) => {
 
   if (interaction.commandName === 'ip') {
     await interaction.reply({ embeds: [ipEmbed()] });
+    return;
+  }
+
+  if (interaction.commandName === 'estado') {
+    const modo = interaction.options.getString('modo', true);
+    if (modo === 'activo') botOnlineStatus = 'online';
+    if (modo === 'inactivo') botOnlineStatus = 'idle';
+    if (modo === 'no_molestar') botOnlineStatus = 'dnd';
+    setBotPresence();
+    await interaction.reply({
+      content: `Estado del bot: **${modo.replace('_', ' ')}**.`,
+      ephemeral: true,
+    });
     return;
   }
 
