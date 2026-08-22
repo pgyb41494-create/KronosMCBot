@@ -9,10 +9,9 @@ const {
   ActivityType,
   Events,
 } = require('discord.js');
+const { ticketCommand, ticketSetupCommand, handleTicketInteraction } = require('./tickets');
 
-// Do NOT paste the token, Application ID, or Client ID in this file.
-// Put only the Bot Token in a file named .env:
-// DISCORD_TOKEN=your_bot_token
+
 
 const token = process.env.DISCORD_TOKEN;
 
@@ -71,6 +70,8 @@ const commands = [
     .addStringOption((option) =>
       option.setName('codigo').setDescription('Introduce el código.').setRequired(true),
     ),
+  ticketCommand(),
+  ticketSetupCommand(),
 ].map((command) => command.toJSON());
 
 function ipEmbed() {
@@ -148,6 +149,16 @@ client.on(Events.MessageCreate, async (message) => {
 });
 
 client.on(Events.InteractionCreate, async (interaction) => {
+  try {
+    if (await handleTicketInteraction(interaction)) return;
+  } catch (error) {
+    console.error(error);
+    const reply = { content: 'Hubo un error con el sistema de tickets.', ephemeral: true };
+    if (interaction.replied || interaction.deferred) await interaction.followUp(reply).catch(() => {});
+    else await interaction.reply(reply).catch(() => {});
+    return;
+  }
+
   if (!interaction.isChatInputCommand()) return;
 
   if (interaction.commandName === 'ip') {

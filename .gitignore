@@ -1,4 +1,5 @@
 node_modules/
+tickets-data.json
 .env
 *.log
 .DS_Store
