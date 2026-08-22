@@ -15,6 +15,7 @@ const {
   ModalBuilder,
   TextInputBuilder,
   TextInputStyle,
+  AttachmentBuilder,
 } = require('discord.js');
 
 const { dataFile } = require('./storage');
@@ -796,20 +797,78 @@ function ticketSetupCommand() {
     .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild);
 }
 
-async function sendAudit(guild, panel, text) {
+async function sendAudit(guild, panel, options) {
   if (!panel.auditLogChannelId) return;
-  const channel = guild.channels.cache.get(panel.auditLogChannelId);
+  let channel = guild.channels.cache.get(panel.auditLogChannelId);
+  if (!channel) {
+    channel = await guild.channels.fetch(panel.auditLogChannelId).catch(() => null);
+  }
   if (!channel?.isTextBased()) return;
 
-  await channel.send({
+  const payload = {
     embeds: [
       new EmbedBuilder()
-        .setColor(GOLD)
-        .setTitle('Registro | Tickets')
-        .setDescription(text)
+        .setColor(options.color || GOLD)
+        .setTitle(options.title || 'Registro | Tickets')
+        .setDescription((options.description || '').slice(0, 4096))
+        .addFields((options.fields || []).slice(0, 25))
         .setTimestamp(),
     ],
+  };
+  if (options.files?.length) payload.files = options.files;
+
+  await channel.send(payload);
+}
+
+function formatLogTime(date) {
+  return date.toISOString().replace('T', ' ').slice(0, 19);
+}
+
+function formatDuration(startMs) {
+  const ms = Math.max(0, Date.now() - startMs);
+  const minutes = Math.floor(ms / 60000);
+  const hours = Math.floor(minutes / 60);
+  const days = Math.floor(hours / 24);
+  if (days) return `${days}d ${hours % 24}h ${minutes % 60}m`;
+  if (hours) return `${hours}h ${minutes % 60}m`;
+  return `${Math.max(1, minutes)}m`;
+}
+
+async function fetchTicketHistory(channel) {
+  const collected = [];
+  let before;
+  for (let i = 0; i < 10; i += 1) {
+    const batch = await channel.messages.fetch({ limit: 100, ...(before ? { before } : {}) });
+    if (!batch.size) break;
+    const list = [...batch.values()];
+    collected.push(...list);
+    before = list[list.length - 1].id;
+    if (batch.size < 100) break;
+  }
+
+  collected.sort((a, b) => a.createdTimestamp - b.createdTimestamp);
+
+  const lines = collected.map((message) => {
+    const time = formatLogTime(message.createdAt);
+    const author = message.author?.tag || message.author?.username || 'Desconocido';
+    const bits = [];
+    if (message.content) bits.push(message.content);
+    if (message.attachments.size) {
+      bits.push(
+        [...message.attachments.values()].map((file) => `[archivo] ${file.url}`).join(' '),
+      );
+    }
+    if (message.embeds.length && !message.content) bits.push('[embed]');
+    return `[${time}] ${author}: ${bits.join(' ') || '(sin texto)'}`;
   });
+
+  const participants = [...new Set(collected.map((message) => message.author?.tag).filter(Boolean))];
+
+  return {
+    count: collected.length,
+    participants,
+    transcript: lines.join('\n') || '(No hay mensajes)',
+  };
 }
 
 async function openTicket(interaction, panel, reason) {
@@ -906,11 +965,19 @@ async function openTicket(interaction, panel, reason) {
     ephemeral: true,
   });
 
-  await sendAudit(
-    interaction.guild,
-    panel,
-    `> **Abierto** por ${interaction.user} (${interaction.user.tag})\n> Panel: \`${panel.name}\`\n> Canal: ${channel}\n> Motivo: ${reason || 'botón'}`,
-  );
+  await sendAudit(interaction.guild, panel, {
+    title: 'Ticket abierto',
+    color: 0x57f287,
+    description: `Se abrió un ticket en ${channel}.`,
+    fields: [
+      { name: 'Usuario', value: `${interaction.user} \`${interaction.user.tag}\`\nID: \`${interaction.user.id}\``, inline: true },
+      { name: 'Panel', value: `\`${panel.name}\``, inline: true },
+      { name: 'Motivo', value: reason || 'botón', inline: true },
+      { name: 'Canal', value: `${channel}`, inline: true },
+      { name: 'Equipo', value: staffMentions(panel), inline: true },
+      { name: 'Cuenta creada', value: `<t:${Math.floor(interaction.user.createdTimestamp / 1000)}:R>`, inline: true },
+    ],
+  });
 }
 
 async function handleTicketSlash(interaction) {
@@ -1422,14 +1489,48 @@ async function handleTicketInteraction(interaction) {
 
   if (interaction.isButton() && interaction.customId.startsWith('tkclose:')) {
     const panel = getPanel(interaction.guildId, interaction.customId.split(':')[1]);
-    await interaction.reply('Cerrando ticket en 3 segundos...');
+    await interaction.reply('Cerrando ticket y enviando el registro...');
+
     if (panel) {
-      await sendAudit(
-        interaction.guild,
-        panel,
-        `> **Cerrado** por ${interaction.user} (${interaction.user.tag})\n> Canal: ${interaction.channel}`,
-      );
+      const topic = interaction.channel.topic || '';
+      const openedId = topic.split(':')[2];
+      const opener = openedId ? `<@${openedId}>` : 'desconocido';
+      const history = await fetchTicketHistory(interaction.channel).catch(() => ({
+        count: 0,
+        participants: [],
+        transcript: '(No se pudo leer el historial)',
+      }));
+
+      const files = [];
+      if (history.transcript) {
+        files.push(
+          new AttachmentBuilder(Buffer.from(history.transcript, 'utf8'), {
+            name: `ticket-${interaction.channel.name}.txt`,
+          }),
+        );
+      }
+
+      await sendAudit(interaction.guild, panel, {
+        title: 'Ticket cerrado',
+        color: 0xed4245,
+        description: `Se cerró ${interaction.channel} y se adjuntó el historial del chat.`,
+        fields: [
+          { name: 'Cerrado por', value: `${interaction.user} \`${interaction.user.tag}\``, inline: true },
+          { name: 'Abierto por', value: opener, inline: true },
+          { name: 'Panel', value: `\`${panel.name}\``, inline: true },
+          { name: 'Duración', value: formatDuration(interaction.channel.createdTimestamp), inline: true },
+          { name: 'Mensajes', value: String(history.count), inline: true },
+          {
+            name: 'Participantes',
+            value: (history.participants.join('\n') || 'ninguno').slice(0, 1024),
+            inline: true,
+          },
+          { name: 'Canal', value: `\`${interaction.channel.name}\``, inline: false },
+        ],
+        files,
+      });
     }
+
     setTimeout(() => {
       interaction.channel.delete().catch(() => {});
     }, 3000);
