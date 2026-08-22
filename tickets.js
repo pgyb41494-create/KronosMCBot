@@ -17,7 +17,10 @@ const {
   TextInputStyle,
 } = require('discord.js');
 
-const DATA_FILE = path.join(__dirname, 'tickets-data.json');
+const { dataFile } = require('./storage');
+
+const DATA_FILE = dataFile('tickets-data.json');
+const LEGACY_FILE = path.join(__dirname, 'tickets-data.json');
 const GOLD = 0xE6B325;
 const BUTTON_STYLES = {
   azul: ButtonStyle.Primary,
@@ -30,6 +33,15 @@ function loadData() {
   try {
     return JSON.parse(fs.readFileSync(DATA_FILE, 'utf8'));
   } catch {
+    try {
+      if (fs.existsSync(LEGACY_FILE)) {
+        const data = JSON.parse(fs.readFileSync(LEGACY_FILE, 'utf8'));
+        saveData(data);
+        return data;
+      }
+    } catch {
+      // ignore corrupt legacy file
+    }
     return { guilds: {} };
   }
 }

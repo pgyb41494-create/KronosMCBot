@@ -36,3 +36,17 @@ The whole bot is `bot.js`. **Never paste the token, Application ID, or Client ID
 npm install
 npm start
 ```
+
+## Storage (Railway volume)
+
+Ticket panels are saved as JSON in a data folder so they survive restarts.
+
+- Local: `./data/tickets-data.json` (or whatever you set in `DATA_DIR`)
+- Railway: add a **Volume**, mount it at `/data`, then set:
+
+```
+DATA_DIR=/data
+DISCORD_TOKEN=your_bot_token
+```
+
+Do not put the token in the code. The volume is what keeps ticket config after a redeploy.
