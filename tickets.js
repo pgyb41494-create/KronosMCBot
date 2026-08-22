@@ -240,7 +240,7 @@ function setupListEmbed(store) {
     .setDescription(
       names.length
         ? 'Usa el menú de abajo para elegir un panel y configurarlo paso a paso.'
-        : 'No hay paneles todavía. Crea uno con `/ticket`.',
+        : 'No hay paneles todavía. Crea uno con `/ticket` o **Importar mensaje** con el enlace del embed.',
     );
 
   if (names.length) {
@@ -498,12 +498,163 @@ function wizardPayload(panel, step) {
 }
 
 function pickPayload(store) {
+  const components = [];
   const row = setupSelectRow(store);
+  if (row) components.push(row);
+  components.push(
+    new ActionRowBuilder().addComponents(
+      new ButtonBuilder()
+        .setCustomId('tksetup_import')
+        .setLabel('Importar mensaje')
+        .setStyle(ButtonStyle.Primary),
+    ),
+  );
   return {
     content: null,
     embeds: [setupListEmbed(store)],
-    components: row ? [row] : [],
+    components,
   };
+}
+
+function importModal() {
+  return new ModalBuilder()
+    .setCustomId('tksetup_import_modal')
+    .setTitle('Importar panel')
+    .addComponents(
+      new ActionRowBuilder().addComponents(
+        textInput(
+          'enlace',
+          'Enlace del mensaje (clic derecho → Copiar enlace)',
+          TextInputStyle.Paragraph,
+          '',
+          200,
+          true,
+        ),
+      ),
+    );
+}
+
+function parseMessageLink(input, fallbackChannelId) {
+  const text = String(input || '').trim();
+  const match = text.match(/channels\/(\d+)\/(\d+)\/(\d+)/);
+  if (match) {
+    return { guildId: match[1], channelId: match[2], messageId: match[3] };
+  }
+  const idOnly = text.match(/^(\d{17,20})$/);
+  if (idOnly && fallbackChannelId) {
+    return { channelId: fallbackChannelId, messageId: idOnly[1] };
+  }
+  return null;
+}
+
+function styleFromDiscord(style) {
+  if (style === ButtonStyle.Primary || style === 1) return 'azul';
+  if (style === ButtonStyle.Secondary || style === 2) return 'gris';
+  if (style === ButtonStyle.Success || style === 3) return 'verde';
+  if (style === ButtonStyle.Danger || style === 4) return 'rojo';
+  return 'azul';
+}
+
+function panelFromMessage(message) {
+  const embed = message.embeds[0];
+  let name = slug(embed?.title || 'tickets');
+  if (!name) name = 'tickets';
+
+  const panel = emptyPanel(name);
+  if (embed) {
+    panel.title = embed.title || panel.title;
+    panel.body = embed.description || panel.body;
+    panel.color = embed.color || panel.color;
+    panel.footer = embed.footer?.text || '';
+    panel.icon = embed.author?.iconURL || embed.author?.icon_url || '';
+    panel.thumbnail = embed.thumbnail?.url || '';
+    panel.image = embed.image?.url || '';
+    panel.fields = (embed.fields || []).map((field) => ({
+      name: field.name,
+      value: field.value,
+      inline: Boolean(field.inline),
+    }));
+  }
+
+  panel.buttons = [];
+  panel.dropdown = { placeholder: 'Selecciona una opción', options: [] };
+
+  for (const row of message.components || []) {
+    for (const component of row.components || []) {
+      if (component.type === 2 || component.data?.style) {
+        panel.buttons.push({
+          label: component.label || 'Ticket',
+          style: styleFromDiscord(component.style),
+          emoji: component.emoji?.name || '',
+        });
+      }
+      if (component.type === 3 || component.options) {
+        panel.dropdown.placeholder = component.placeholder || panel.dropdown.placeholder;
+        panel.dropdown.options = (component.options || []).map((option) => ({
+          label: option.label,
+          description: option.description || 'Abrir ticket',
+          emoji: option.emoji?.name || '',
+        }));
+      }
+    }
+  }
+
+  panel.sendChannelId = message.channelId;
+  panel.messageId = message.id;
+  return panel;
+}
+
+async function importPanelFromLink(interaction, link) {
+  const parsed = parseMessageLink(link, interaction.channelId);
+  if (!parsed) {
+    await interaction.reply({
+      content: 'Enlace inválido. En Discord: clic derecho en el mensaje del panel → **Copiar enlace del mensaje**.',
+      ephemeral: true,
+    });
+    return;
+  }
+
+  if (parsed.guildId && parsed.guildId !== interaction.guildId) {
+    await interaction.reply({ content: 'Ese mensaje no es de este servidor.', ephemeral: true });
+    return;
+  }
+
+  const channel = await interaction.guild.channels.fetch(parsed.channelId).catch(() => null);
+  if (!channel?.isTextBased()) {
+    await interaction.reply({ content: 'No pude ver ese canal. Dame acceso y prueba otra vez.', ephemeral: true });
+    return;
+  }
+
+  const message = await channel.messages.fetch(parsed.messageId).catch(() => null);
+  if (!message) {
+    await interaction.reply({ content: 'No encontré ese mensaje.', ephemeral: true });
+    return;
+  }
+
+  const { store } = guildStore(interaction.guildId);
+  let panel = panelFromMessage(message);
+  let base = panel.name;
+  let n = 2;
+  while (store.panels[panel.name]) {
+    panel.name = `${base}-${n}`.slice(0, 32);
+    n += 1;
+  }
+
+  savePanel(interaction.guildId, panel);
+
+  try {
+    await message.edit({
+      embeds: message.embeds,
+      components: panelComponents(panel),
+    });
+  } catch (error) {
+    console.error('Could not rebind imported panel message:', error);
+  }
+
+  await interaction.reply({
+    content: `Panel \`${panel.name}\` importado desde ${channel}. Ya puedes editarlo con \`/ticketsetup\`.`,
+    ephemeral: true,
+  });
 }
 
 function ticketCommand() {
@@ -519,6 +670,7 @@ function ticketActionRow() {
       .setCustomId('tkt_accion')
       .setPlaceholder('Elige una acción')
       .addOptions(
+        { label: 'Importar mensaje', value: 'importar', description: 'Recupera un panel ya publicado' },
         { label: 'Crear panel', value: 'crear', description: 'Nuevo panel de tickets' },
         { label: 'Editar mensaje', value: 'mensaje', description: 'Título, cuerpo, pie e imágenes' },
         { label: 'Añadir campo', value: 'campo', description: 'Un field extra en el embed' },
@@ -803,12 +955,27 @@ async function handleTicketInteraction(interaction) {
     return false;
   }
 
+  if (interaction.isButton() && interaction.customId === 'tksetup_import') {
+    await interaction.showModal(importModal());
+    return true;
+  }
+
+  if (interaction.isModalSubmit() && interaction.customId === 'tksetup_import_modal') {
+    await importPanelFromLink(interaction, interaction.fields.getTextInputValue('enlace'));
+    return true;
+  }
+
   if (interaction.isStringSelectMenu() && interaction.customId === 'tkt_accion') {
     const action = interaction.values[0];
     const { store } = guildStore(interaction.guildId);
 
     if (action === 'crear') {
       await interaction.showModal(crearModal());
+      return true;
+    }
+
+    if (action === 'importar') {
+      await interaction.showModal(importModal());
       return true;
     }
 
