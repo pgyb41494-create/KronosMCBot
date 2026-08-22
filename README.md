@@ -20,7 +20,7 @@ Slash commands are **per server**, not global. On startup the bot removes global
 | `/tienda` | Store link |
 | `/estado` | Set status: activo, inactivo, no molestar |
 | `/kronoschito` | Internal command (code + rank, not wired yet) |
-| `/ticket` | Crear y editar paneles de tickets (mensaje, campos, botones, menú, destinos) |
+| `/ticket` | Abre un menú para crear, editar, borrar o ver paneles |
 | `/ticketsetup` | Envía un embed con todos los paneles; elige uno y configúralo paso a paso, luego **Republicar** |
 
 ## Setup
