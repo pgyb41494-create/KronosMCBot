@@ -70,6 +70,7 @@ function emptyPanel(name) {
     categoryId: null,
     auditLogChannelId: null,
     staffRoleId: null,
+    messageId: null,
   };
 }
 
@@ -155,10 +156,10 @@ function setupListEmbed(store) {
   const names = Object.keys(store.panels);
   const embed = new EmbedBuilder()
     .setColor(GOLD)
-    .setTitle('Configuración de tickets')
+    .setTitle('Paneles de tickets')
     .setDescription(
       names.length
-        ? 'Selecciona un panel para configurar el canal, la categoría y el registro.'
+        ? 'Usa el menú de abajo para elegir un panel y configurarlo paso a paso.'
         : 'No hay paneles todavía. Crea uno con `/ticket crear`.',
     );
 
@@ -200,42 +201,153 @@ function setupSelectRow(store) {
   );
 }
 
-function setupConfigRows(panel) {
+const SETUP_STEPS = [
+  {
+    id: 1,
+    title: 'Paso 1 de 6 · Canal del mensaje',
+    hint: 'Elige dónde se envía el panel de tickets.',
+  },
+  {
+    id: 2,
+    title: 'Paso 2 de 6 · Categoría',
+    hint: 'Los tickets nuevos se abrirán en esta categoría.',
+  },
+  {
+    id: 3,
+    title: 'Paso 3 de 6 · Registro',
+    hint: 'Canal de registro de todos los tickets (abrir y cerrar).',
+  },
+  {
+    id: 4,
+    title: 'Paso 4 de 6 · Equipo',
+    hint: 'Rol que puede ver y atender los tickets.',
+  },
+  {
+    id: 5,
+    title: 'Paso 5 de 6 · Editar mensaje',
+    hint: 'Cambia título, cuerpo, pie e imágenes.',
+  },
+  {
+    id: 6,
+    title: 'Paso 6 de 6 · Republicar',
+    hint: 'Revisa todo y publica el panel otra vez con la nueva configuración.',
+  },
+];
+
+function panelSummary(panel) {
   return [
-    new ActionRowBuilder().addComponents(
-      new ChannelSelectMenuBuilder()
-        .setCustomId(`tksetup_send:${panel.name}`)
-        .setPlaceholder('Canal donde se envía el mensaje del panel')
-        .addChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement),
-    ),
-    new ActionRowBuilder().addComponents(
-      new ChannelSelectMenuBuilder()
-        .setCustomId(`tksetup_category:${panel.name}`)
-        .setPlaceholder('Categoría donde se abren los tickets')
-        .addChannelTypes(ChannelType.GuildCategory),
-    ),
-    new ActionRowBuilder().addComponents(
-      new ChannelSelectMenuBuilder()
-        .setCustomId(`tksetup_audit:${panel.name}`)
-        .setPlaceholder('Canal de registro de todos los tickets')
-        .addChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement),
-    ),
-    new ActionRowBuilder().addComponents(
-      new RoleSelectMenuBuilder()
-        .setCustomId(`tksetup_staff:${panel.name}`)
-        .setPlaceholder('Rol del equipo que ve los tickets'),
-    ),
-    new ActionRowBuilder().addComponents(
+    `> **ID:** \`${panel.name}\``,
+    `> **Canal:** ${panel.sendChannelId ? `<#${panel.sendChannelId}>` : 'sin asignar'}`,
+    `> **Categoría:** ${panel.categoryId ? `<#${panel.categoryId}>` : 'sin asignar'}`,
+    `> **Registro:** ${panel.auditLogChannelId ? `<#${panel.auditLogChannelId}>` : 'sin asignar'}`,
+    `> **Equipo:** ${panel.staffRoleId ? `<@&${panel.staffRoleId}>` : 'sin asignar'}`,
+  ].join('\n');
+}
+
+function wizardNav(panel, step) {
+  const row = new ActionRowBuilder();
+  row.addComponents(
+    new ButtonBuilder()
+      .setCustomId(`tksetup_back:${panel.name}:${step}`)
+      .setLabel('Atrás')
+      .setStyle(ButtonStyle.Secondary),
+  );
+  if (step < 6) {
+    row.addComponents(
+      new ButtonBuilder()
+        .setCustomId(`tksetup_next:${panel.name}:${step}`)
+        .setLabel('Siguiente')
+        .setStyle(ButtonStyle.Primary),
+    );
+  } else {
+    row.addComponents(
       new ButtonBuilder()
         .setCustomId(`tksetup_post:${panel.name}`)
-        .setLabel('Enviar panel')
+        .setLabel('Republicar')
         .setStyle(ButtonStyle.Success),
-      new ButtonBuilder()
-        .setCustomId(`tksetup_edit:${panel.name}`)
-        .setLabel('Editar texto')
-        .setStyle(ButtonStyle.Primary),
-    ),
-  ];
+    );
+  }
+  return row;
+}
+
+function wizardPayload(panel, step) {
+  const info = SETUP_STEPS.find((item) => item.id === step) || SETUP_STEPS[0];
+  const embed = new EmbedBuilder()
+    .setColor(GOLD)
+    .setTitle(info.title)
+    .setDescription(`${info.hint}\n\n${panelSummary(panel)}`);
+
+  const rows = [];
+
+  if (step === 1) {
+    rows.push(
+      new ActionRowBuilder().addComponents(
+        new ChannelSelectMenuBuilder()
+          .setCustomId(`tksetup_send:${panel.name}`)
+          .setPlaceholder('Canal donde se envía el mensaje del panel')
+          .addChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement),
+      ),
+    );
+  }
+
+  if (step === 2) {
+    rows.push(
+      new ActionRowBuilder().addComponents(
+        new ChannelSelectMenuBuilder()
+          .setCustomId(`tksetup_category:${panel.name}`)
+          .setPlaceholder('Categoría donde se abren los tickets')
+          .addChannelTypes(ChannelType.GuildCategory),
+      ),
+    );
+  }
+
+  if (step === 3) {
+    rows.push(
+      new ActionRowBuilder().addComponents(
+        new ChannelSelectMenuBuilder()
+          .setCustomId(`tksetup_audit:${panel.name}`)
+          .setPlaceholder('Canal de registro de todos los tickets')
+          .addChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement),
+      ),
+    );
+  }
+
+  if (step === 4) {
+    rows.push(
+      new ActionRowBuilder().addComponents(
+        new RoleSelectMenuBuilder()
+          .setCustomId(`tksetup_staff:${panel.name}`)
+          .setPlaceholder('Rol del equipo que ve los tickets'),
+      ),
+    );
+  }
+
+  if (step === 5) {
+    rows.push(
+      new ActionRowBuilder().addComponents(
+        new ButtonBuilder()
+          .setCustomId(`tksetup_edit:${panel.name}`)
+          .setLabel('Editar texto')
+          .setStyle(ButtonStyle.Primary),
+      ),
+    );
+  }
+
+  rows.push(wizardNav(panel, step));
+
+  const embeds = [embed];
+  if (step === 5 || step === 6) embeds.push(panelEmbed(panel));
+
+  return { embeds, components: rows };
+}
+
+function pickPayload(store) {
+  const row = setupSelectRow(store);
+  return {
+    content: null,
+    embeds: [setupListEmbed(store)],
+    components: row ? [row] : [],
+  };
 }
 
 function ticketCommand() {
@@ -628,7 +740,10 @@ async function handleTicketSlash(interaction) {
     const category = interaction.options.getChannel('categoria');
     const audit = interaction.options.getChannel('registro');
     const staff = interaction.options.getRole('equipo');
-    if (send) panel.sendChannelId = send.id;
+    if (send) {
+      if (panel.sendChannelId !== send.id) panel.messageId = null;
+      panel.sendChannelId = send.id;
+    }
     if (category) panel.categoryId = category.id;
     if (audit) panel.auditLogChannelId = audit.id;
     if (staff) panel.staffRoleId = staff.id;
@@ -651,12 +766,7 @@ async function handleTicketSlash(interaction) {
 
 async function handleTicketSetupSlash(interaction) {
   const { store } = guildStore(interaction.guildId);
-  const row = setupSelectRow(store);
-  await interaction.reply({
-    embeds: [setupListEmbed(store)],
-    components: row ? [row] : [],
-    ephemeral: true,
-  });
+  await interaction.reply(pickPayload(store));
 }
 
 function textInput(id, label, style, value, max = 4000) {
@@ -712,11 +822,35 @@ async function handleTicketInteraction(interaction) {
       await interaction.reply({ content: 'Ese panel ya no existe.', ephemeral: true });
       return true;
     }
-    await interaction.update({
-      content: `Configurando **${panel.title || panel.name}** (\`${panel.name}\`)`,
-      embeds: [panelEmbed(panel), setupListEmbed(guildStore(interaction.guildId).store)],
-      components: setupConfigRows(panel),
-    });
+    await interaction.update(wizardPayload(panel, 1));
+    return true;
+  }
+
+  if (interaction.isButton() && interaction.customId.startsWith('tksetup_next:')) {
+    const [, name, stepText] = interaction.customId.split(':');
+    const panel = getPanel(interaction.guildId, name);
+    if (!panel) {
+      await interaction.reply({ content: 'Ese panel ya no existe.', ephemeral: true });
+      return true;
+    }
+    const next = Math.min(6, Number(stepText) + 1);
+    await interaction.update(wizardPayload(panel, next));
+    return true;
+  }
+
+  if (interaction.isButton() && interaction.customId.startsWith('tksetup_back:')) {
+    const [, name, stepText] = interaction.customId.split(':');
+    const step = Number(stepText);
+    if (step <= 1) {
+      await interaction.update(pickPayload(guildStore(interaction.guildId).store));
+      return true;
+    }
+    const panel = getPanel(interaction.guildId, name);
+    if (!panel) {
+      await interaction.reply({ content: 'Ese panel ya no existe.', ephemeral: true });
+      return true;
+    }
+    await interaction.update(wizardPayload(panel, step - 1));
     return true;
   }
 
@@ -728,14 +862,22 @@ async function handleTicketInteraction(interaction) {
       return true;
     }
     const channelId = interaction.values[0];
-    if (kind === 'tksetup_send') panel.sendChannelId = channelId;
-    if (kind === 'tksetup_category') panel.categoryId = channelId;
-    if (kind === 'tksetup_audit') panel.auditLogChannelId = channelId;
+    let step = 1;
+    if (kind === 'tksetup_send') {
+      if (panel.sendChannelId !== channelId) panel.messageId = null;
+      panel.sendChannelId = channelId;
+      step = 1;
+    }
+    if (kind === 'tksetup_category') {
+      panel.categoryId = channelId;
+      step = 2;
+    }
+    if (kind === 'tksetup_audit') {
+      panel.auditLogChannelId = channelId;
+      step = 3;
+    }
     savePanel(interaction.guildId, panel);
-    await interaction.reply({
-      content: `Guardado: <#${channelId}>`,
-      ephemeral: true,
-    });
+    await interaction.update(wizardPayload(panel, step));
     return true;
   }
 
@@ -748,10 +890,7 @@ async function handleTicketInteraction(interaction) {
     }
     panel.staffRoleId = interaction.values[0];
     savePanel(interaction.guildId, panel);
-    await interaction.reply({
-      content: `Equipo: <@&${panel.staffRoleId}>`,
-      ephemeral: true,
-    });
+    await interaction.update(wizardPayload(panel, 4));
     return true;
   }
 
@@ -763,7 +902,7 @@ async function handleTicketInteraction(interaction) {
     }
     if (!panel.sendChannelId) {
       await interaction.reply({
-        content: 'Elige primero el canal donde se envía el panel.',
+        content: 'Elige primero el canal donde se envía el panel (paso 1).',
         ephemeral: true,
       });
       return true;
@@ -773,11 +912,33 @@ async function handleTicketInteraction(interaction) {
       await interaction.reply({ content: 'El canal del panel no es válido.', ephemeral: true });
       return true;
     }
-    await channel.send({
+
+    const payload = {
       embeds: [panelEmbed(panel)],
       components: panelComponents(panel),
+    };
+
+    let published = 'enviado';
+    if (panel.messageId) {
+      try {
+        const existing = await channel.messages.fetch(panel.messageId);
+        await existing.edit(payload);
+        published = 'actualizado';
+      } catch {
+        const sent = await channel.send(payload);
+        panel.messageId = sent.id;
+        savePanel(interaction.guildId, panel);
+      }
+    } else {
+      const sent = await channel.send(payload);
+      panel.messageId = sent.id;
+      savePanel(interaction.guildId, panel);
+    }
+
+    await interaction.reply({
+      content: `Panel ${published} en ${channel}.`,
+      ephemeral: true,
     });
-    await interaction.reply({ content: `Panel enviado a ${channel}.`, ephemeral: true });
     return true;
   }
 
