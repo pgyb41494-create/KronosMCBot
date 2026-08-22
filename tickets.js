@@ -83,6 +83,8 @@ function emptyPanel(name) {
     auditLogChannelId: null,
     staffRoleIds: [],
     messageId: null,
+    ticketTitle: 'Ticket',
+    ticketBody: 'Hola {user}, gracias por abrir un ticket.\n> Motivo: {motivo}\nEl equipo te atenderá pronto.',
   };
 }
 
@@ -92,6 +94,10 @@ function getPanel(guildId, name) {
   if (!panel) return null;
   if (!Array.isArray(panel.staffRoleIds)) {
     panel.staffRoleIds = panel.staffRoleId ? [panel.staffRoleId] : [];
+  }
+  if (!panel.ticketTitle) panel.ticketTitle = 'Ticket';
+  if (!panel.ticketBody) {
+    panel.ticketBody = 'Hola {user}, gracias por abrir un ticket.\n> Motivo: {motivo}\nEl equipo te atenderá pronto.';
   }
   return panel;
 }
@@ -150,25 +156,23 @@ function applyVars(text, ctx = {}) {
   return out;
 }
 
-function varsHelpEmbed() {
+function varsFooter() {
+  return {
+    text: 'Variables: {user} {usuario} {username} {usertag} {userid} | {server} {servidor} {membercount} {miembros} | {channel} {canal} {motivo} {staff} {panel}',
+  };
+}
+
+function ticketInsideEmbed(panel, ctx = {}) {
   return new EmbedBuilder()
-    .setColor(GOLD)
-    .setTitle('Variables')
-    .setDescription('Puedes usar estas variables en título, cuerpo, pie, campos, botones y menú.')
-    .addFields(
-      {
-        name: 'Usuario',
-        value: '`{user}` `{usuario}` `{username}` `{usertag}` `{userid}`',
-      },
-      {
-        name: 'Servidor',
-        value: '`{server}` `{servidor}` `{serverid}` `{membercount}` `{miembros}`',
-      },
-      {
-        name: 'Ticket',
-        value: '`{channel}` `{canal}` `{motivo}` `{reason}` `{staff}` `{panel}`',
-      },
-    );
+    .setColor(panel.color || GOLD)
+    .setTitle(applyVars(panel.ticketTitle || 'Ticket', ctx).slice(0, 256))
+    .setDescription(
+      applyVars(
+        panel.ticketBody || 'Hola {user}, el equipo te atenderá pronto.\n> Motivo: {motivo}',
+        ctx,
+      ).slice(0, 4096),
+    )
+    .setTimestamp();
 }
 
 function panelEmbed(panel, ctx = {}) {
@@ -282,46 +286,51 @@ function setupSelectRow(store) {
   );
 }
 
-const LAST_SETUP_STEP = 8;
+const LAST_SETUP_STEP = 9;
 const SETUP_STEPS = [
   {
     id: 1,
-    title: 'Paso 1 de 8 · Canal del mensaje',
+    title: 'Paso 1 de 9 · Canal del mensaje',
     hint: 'Elige dónde se envía el panel de tickets.',
   },
   {
     id: 2,
-    title: 'Paso 2 de 8 · Categoría',
+    title: 'Paso 2 de 9 · Categoría',
     hint: 'Los tickets nuevos se abrirán en esta categoría.',
   },
   {
     id: 3,
-    title: 'Paso 3 de 8 · Registro',
+    title: 'Paso 3 de 9 · Registro',
     hint: 'Canal de registro de todos los tickets (abrir y cerrar).',
   },
   {
     id: 4,
-    title: 'Paso 4 de 8 · Equipo',
+    title: 'Paso 4 de 9 · Equipo',
     hint: 'Puedes elegir más de un rol. Esos roles verán los tickets.',
   },
   {
     id: 5,
-    title: 'Paso 5 de 8 · Editar mensaje',
-    hint: 'Cambia título, cuerpo, pie e imágenes. Puedes usar variables como `{user}` y `{server}`.',
+    title: 'Paso 5 de 9 · Mensaje del panel',
+    hint: 'Este embed es el que se publica en el canal (título, cuerpo, imágenes).',
   },
   {
     id: 6,
-    title: 'Paso 6 de 8 · Botones',
-    hint: 'Añade botones que abren un ticket. Máximo 5.',
+    title: 'Paso 6 de 9 · Mensaje dentro del ticket',
+    hint: 'Este texto aparece dentro del canal cuando alguien abre un ticket.',
   },
   {
     id: 7,
-    title: 'Paso 7 de 8 · Menú desplegable',
-    hint: 'Añade un dropdown con opciones que abren un ticket.',
+    title: 'Paso 7 de 9 · Botones',
+    hint: 'Añade botones que abren un ticket. Máximo 5.',
   },
   {
     id: 8,
-    title: 'Paso 8 de 8 · Republicar',
+    title: 'Paso 8 de 9 · Menú desplegable',
+    hint: 'Añade un dropdown con opciones que abren un ticket.',
+  },
+  {
+    id: 9,
+    title: 'Paso 9 de 9 · Republicar',
     hint: 'Revisa todo y publica el panel otra vez con la nueva configuración.',
   },
 ];
@@ -368,6 +377,8 @@ function wizardPayload(panel, step) {
     .setColor(GOLD)
     .setTitle(info.title)
     .setDescription(`${info.hint}\n\n${panelSummary(panel)}`);
+
+  if (step === 5 || step === 6) embed.setFooter(varsFooter());
 
   const rows = [];
 
@@ -431,6 +442,17 @@ function wizardPayload(panel, step) {
     rows.push(
       new ActionRowBuilder().addComponents(
         new ButtonBuilder()
+          .setCustomId(`tksetup_tickettxt:${panel.name}`)
+          .setLabel('Editar mensaje del ticket')
+          .setStyle(ButtonStyle.Primary),
+      ),
+    );
+  }
+
+  if (step === 7) {
+    rows.push(
+      new ActionRowBuilder().addComponents(
+        new ButtonBuilder()
           .setCustomId(`tksetup_addbtn:${panel.name}`)
           .setLabel('Añadir botón')
           .setStyle(ButtonStyle.Primary),
@@ -442,7 +464,7 @@ function wizardPayload(panel, step) {
     );
   }
 
-  if (step === 7) {
+  if (step === 8) {
     rows.push(
       new ActionRowBuilder().addComponents(
         new ButtonBuilder()
@@ -464,9 +486,10 @@ function wizardPayload(panel, step) {
   rows.push(wizardNav(panel, step));
 
   const embeds = [embed];
-  if (step === 5) embeds.push(varsHelpEmbed(), panelEmbed(panel));
-  if (step === 8) embeds.push(panelEmbed(panel));
-  if (step === 6) {
+  if (step === 5) embeds.push(panelEmbed(panel));
+  if (step === 6) embeds.push(ticketInsideEmbed(panel));
+  if (step === 9) embeds.push(panelEmbed(panel), ticketInsideEmbed(panel));
+  if (step === 7) {
     embeds.push(
       new EmbedBuilder()
         .setColor(GOLD)
@@ -478,7 +501,7 @@ function wizardPayload(panel, step) {
         ),
     );
   }
-  if (step === 7) {
+  if (step === 8) {
     embeds.push(
       new EmbedBuilder()
         .setColor(GOLD)
@@ -874,7 +897,7 @@ async function openTicket(interaction, panel, reason) {
 
   await channel.send({
     content: applyVars(`{user}${staffIds(panel).length ? ' | {staff}' : ''}`, ctx),
-    embeds: [panelEmbed(panel, ctx)],
+    embeds: [ticketInsideEmbed(panel, ctx)],
     components: [closeRow],
   });
 
@@ -909,6 +932,20 @@ function textInput(id, label, style, value, max = 4000, required = false) {
     .setMaxLength(Math.min(max, style === TextInputStyle.Short ? 400 : 4000));
   if (value) input.setValue(String(value).slice(0, Math.min(max, 4000)));
   return input;
+}
+
+function ticketMsgModal(panel) {
+  return new ModalBuilder()
+    .setCustomId(`tksetup_ticketmsg:${panel.name}`)
+    .setTitle('Mensaje del ticket')
+    .addComponents(
+      new ActionRowBuilder().addComponents(
+        textInput('ticket_title', 'Título dentro del ticket', TextInputStyle.Short, panel.ticketTitle, 256),
+      ),
+      new ActionRowBuilder().addComponents(
+        textInput('ticket_body', 'Cuerpo dentro del ticket', TextInputStyle.Paragraph, panel.ticketBody, 4000),
+      ),
+    );
 }
 
 function editModal(panel) {
@@ -1092,7 +1129,7 @@ async function handleTicketInteraction(interaction) {
       emoji: interaction.fields.getTextInputValue('emoji') || '',
     });
     savePanel(interaction.guildId, panel);
-    await interaction.update(wizardPayload(panel, 6));
+    await interaction.update(wizardPayload(panel, 7));
     return true;
   }
 
@@ -1105,7 +1142,7 @@ async function handleTicketInteraction(interaction) {
     panel.dropdown.placeholder =
       interaction.fields.getTextInputValue('texto_menu') || panel.dropdown.placeholder;
     savePanel(interaction.guildId, panel);
-    await interaction.update(wizardPayload(panel, 7));
+    await interaction.update(wizardPayload(panel, 8));
     return true;
   }
 
@@ -1125,7 +1162,7 @@ async function handleTicketInteraction(interaction) {
       emoji: interaction.fields.getTextInputValue('emoji') || '',
     });
     savePanel(interaction.guildId, panel);
-    await interaction.update(wizardPayload(panel, 7));
+    await interaction.update(wizardPayload(panel, 8));
     return true;
   }
 
@@ -1226,7 +1263,7 @@ async function handleTicketInteraction(interaction) {
     }
     panel.buttons = [];
     savePanel(interaction.guildId, panel);
-    await interaction.update(wizardPayload(panel, 6));
+    await interaction.update(wizardPayload(panel, 7));
     return true;
   }
 
@@ -1258,7 +1295,7 @@ async function handleTicketInteraction(interaction) {
     }
     panel.dropdown = { placeholder: 'Selecciona una opción', options: [] };
     savePanel(interaction.guildId, panel);
-    await interaction.update(wizardPayload(panel, 7));
+    await interaction.update(wizardPayload(panel, 8));
     return true;
   }
 
@@ -1308,6 +1345,30 @@ async function handleTicketInteraction(interaction) {
       content: `Panel ${published} en ${channel}.`,
       ephemeral: true,
     });
+    await interaction.message.delete().catch(() => {});
+    return true;
+  }
+
+  if (interaction.isButton() && interaction.customId.startsWith('tksetup_tickettxt:')) {
+    const panel = getPanel(interaction.guildId, interaction.customId.split(':')[1]);
+    if (!panel) {
+      await interaction.reply({ content: 'Ese panel ya no existe.', ephemeral: true });
+      return true;
+    }
+    await interaction.showModal(ticketMsgModal(panel));
+    return true;
+  }
+
+  if (interaction.isModalSubmit() && interaction.customId.startsWith('tksetup_ticketmsg:')) {
+    const panel = getPanel(interaction.guildId, interaction.customId.split(':')[1]);
+    if (!panel) {
+      await interaction.reply({ content: 'Ese panel ya no existe.', ephemeral: true });
+      return true;
+    }
+    panel.ticketTitle = interaction.fields.getTextInputValue('ticket_title') || panel.ticketTitle;
+    panel.ticketBody = interaction.fields.getTextInputValue('ticket_body') || panel.ticketBody;
+    savePanel(interaction.guildId, panel);
+    await interaction.update(wizardPayload(panel, 6));
     return true;
   }
 
