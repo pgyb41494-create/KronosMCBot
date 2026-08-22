@@ -155,11 +155,11 @@ function setupListEmbed(store) {
   const names = Object.keys(store.panels);
   const embed = new EmbedBuilder()
     .setColor(GOLD)
-    .setTitle('Ticket setup')
+    .setTitle('Configuración de tickets')
     .setDescription(
       names.length
-        ? 'Selecciona un panel para configurar el canal, la categoría y el registro de auditoría.'
-        : 'No hay paneles todavía. Crea uno con `/ticket create`.',
+        ? 'Selecciona un panel para configurar el canal, la categoría y el registro.'
+        : 'No hay paneles todavía. Crea uno con `/ticket crear`.',
     );
 
   if (names.length) {
@@ -172,7 +172,7 @@ function setupListEmbed(store) {
             `> ID: \`${name}\``,
             `> Canal: ${panel.sendChannelId ? `<#${panel.sendChannelId}>` : 'sin asignar'}`,
             `> Categoría: ${panel.categoryId ? `<#${panel.categoryId}>` : 'sin asignar'}`,
-            `> Audit log: ${panel.auditLogChannelId ? `<#${panel.auditLogChannelId}>` : 'sin asignar'}`,
+            `> Registro: ${panel.auditLogChannelId ? `<#${panel.auditLogChannelId}>` : 'sin asignar'}`,
           ].join('\n'),
         };
       }),
@@ -217,13 +217,13 @@ function setupConfigRows(panel) {
     new ActionRowBuilder().addComponents(
       new ChannelSelectMenuBuilder()
         .setCustomId(`tksetup_audit:${panel.name}`)
-        .setPlaceholder('Canal de audit log de todos los tickets')
+        .setPlaceholder('Canal de registro de todos los tickets')
         .addChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement),
     ),
     new ActionRowBuilder().addComponents(
       new RoleSelectMenuBuilder()
         .setCustomId(`tksetup_staff:${panel.name}`)
-        .setPlaceholder('Rol del staff que ve los tickets'),
+        .setPlaceholder('Rol del equipo que ve los tickets'),
     ),
     new ActionRowBuilder().addComponents(
       new ButtonBuilder()
@@ -245,7 +245,7 @@ function ticketCommand() {
     .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
     .addSubcommand((sub) =>
       sub
-        .setName('create')
+        .setName('crear')
         .setDescription('Crea un nuevo panel de tickets.')
         .addStringOption((option) =>
           option.setName('nombre').setDescription('ID interno del panel.').setRequired(true).setMaxLength(32),
@@ -253,45 +253,45 @@ function ticketCommand() {
     )
     .addSubcommand((sub) =>
       sub
-        .setName('embed')
+        .setName('mensaje')
         .setDescription('Edita título, cuerpo, icono, miniatura, imagen grande y pie.')
         .addStringOption((option) =>
           option.setName('nombre').setDescription('ID del panel.').setRequired(true),
         )
-        .addStringOption((option) => option.setName('title').setDescription('Título del embed.').setMaxLength(256))
-        .addStringOption((option) => option.setName('body').setDescription('Cuerpo / descripción.').setMaxLength(4000))
-        .addStringOption((option) => option.setName('footer').setDescription('Pie del embed.').setMaxLength(2048))
+        .addStringOption((option) => option.setName('titulo').setDescription('Título del mensaje.').setMaxLength(256))
+        .addStringOption((option) => option.setName('cuerpo').setDescription('Texto principal.').setMaxLength(4000))
+        .addStringOption((option) => option.setName('pie').setDescription('Pie del mensaje.').setMaxLength(2048))
         .addStringOption((option) => option.setName('color').setDescription('Color hex, ej. E6B325'))
-        .addStringOption((option) => option.setName('icon_url').setDescription('URL del icono (esquina).'))
-        .addStringOption((option) => option.setName('thumbnail_url').setDescription('URL de la miniatura.'))
+        .addStringOption((option) => option.setName('icono').setDescription('URL del icono (esquina).'))
+        .addStringOption((option) => option.setName('miniatura').setDescription('URL de la miniatura.'))
         .addStringOption((option) =>
-          option.setName('image_url').setDescription('URL de la imagen grande de abajo.'),
+          option.setName('imagen').setDescription('URL de la imagen grande de abajo.'),
         ),
     )
     .addSubcommand((sub) =>
       sub
-        .setName('add-field')
-        .setDescription('Añade un field al embed.')
+        .setName('campo')
+        .setDescription('Añade un campo al mensaje.')
         .addStringOption((option) =>
           option.setName('nombre').setDescription('ID del panel.').setRequired(true),
         )
         .addStringOption((option) =>
-          option.setName('titulo').setDescription('Nombre del field.').setRequired(true).setMaxLength(256),
+          option.setName('titulo').setDescription('Nombre del campo.').setRequired(true).setMaxLength(256),
         )
         .addStringOption((option) =>
-          option.setName('valor').setDescription('Texto del field.').setRequired(true).setMaxLength(1024),
+          option.setName('valor').setDescription('Texto del campo.').setRequired(true).setMaxLength(1024),
         )
-        .addBooleanOption((option) => option.setName('inline').setDescription('¿En la misma fila?')),
+        .addBooleanOption((option) => option.setName('en_linea').setDescription('¿En la misma fila?')),
     )
     .addSubcommand((sub) =>
       sub
-        .setName('add-button')
+        .setName('boton')
         .setDescription('Añade un botón que abre un ticket.')
         .addStringOption((option) =>
           option.setName('nombre').setDescription('ID del panel.').setRequired(true),
         )
         .addStringOption((option) =>
-          option.setName('label').setDescription('Texto del botón.').setRequired(true).setMaxLength(80),
+          option.setName('texto').setDescription('Texto del botón.').setRequired(true).setMaxLength(80),
         )
         .addStringOption((option) =>
           option
@@ -308,24 +308,24 @@ function ticketCommand() {
     )
     .addSubcommand((sub) =>
       sub
-        .setName('dropdown')
-        .setDescription('Activa o cambia el placeholder del menú desplegable.')
+        .setName('menu')
+        .setDescription('Activa o cambia el texto del menú desplegable.')
         .addStringOption((option) =>
           option.setName('nombre').setDescription('ID del panel.').setRequired(true),
         )
         .addStringOption((option) =>
-          option.setName('placeholder').setDescription('Texto del dropdown.').setMaxLength(150),
+          option.setName('texto_menu').setDescription('Texto del menú desplegable.').setMaxLength(150),
         ),
     )
     .addSubcommand((sub) =>
       sub
-        .setName('add-option')
-        .setDescription('Añade una opción al dropdown.')
+        .setName('opcion')
+        .setDescription('Añade una opción al menú desplegable.')
         .addStringOption((option) =>
           option.setName('nombre').setDescription('ID del panel.').setRequired(true),
         )
         .addStringOption((option) =>
-          option.setName('label').setDescription('Texto de la opción.').setRequired(true).setMaxLength(100),
+          option.setName('texto').setDescription('Texto de la opción.').setRequired(true).setMaxLength(100),
         )
         .addStringOption((option) =>
           option.setName('descripcion').setDescription('Descripción corta.').setMaxLength(100),
@@ -335,7 +335,7 @@ function ticketCommand() {
     .addSubcommand((sub) =>
       sub
         .setName('destinos')
-        .setDescription('Canal del panel, categoría de tickets y audit log.')
+        .setDescription('Canal del panel, categoría de tickets y registro.')
         .addStringOption((option) =>
           option.setName('nombre').setDescription('ID del panel.').setRequired(true),
         )
@@ -353,17 +353,17 @@ function ticketCommand() {
         )
         .addChannelOption((option) =>
           option
-            .setName('audit_log')
+            .setName('registro')
             .setDescription('Canal de registro de todos los tickets.')
             .addChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement),
         )
         .addRoleOption((option) =>
-          option.setName('staff').setDescription('Rol que puede ver los tickets.'),
+          option.setName('equipo').setDescription('Rol que puede ver los tickets.'),
         ),
     )
     .addSubcommand((sub) =>
       sub
-        .setName('preview')
+        .setName('vista')
         .setDescription('Muestra una vista previa del panel.')
         .addStringOption((option) =>
           option.setName('nombre').setDescription('ID del panel.').setRequired(true),
@@ -371,19 +371,19 @@ function ticketCommand() {
     )
     .addSubcommand((sub) =>
       sub
-        .setName('delete')
+        .setName('borrar')
         .setDescription('Borra un panel.')
         .addStringOption((option) =>
           option.setName('nombre').setDescription('ID del panel.').setRequired(true),
         ),
     )
-    .addSubcommand((sub) => sub.setName('list').setDescription('Lista todos los paneles.'));
+    .addSubcommand((sub) => sub.setName('lista').setDescription('Lista todos los paneles.'));
 }
 
 function ticketSetupCommand() {
   return new SlashCommandBuilder()
     .setName('ticketsetup')
-    .setDescription('Elige un panel, configura canal/categoría y envíalo o edítalo.')
+    .setDescription('Elige un panel, configura canal y categoría, y envíalo o edítalo.')
     .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild);
 }
 
@@ -396,7 +396,7 @@ async function sendAudit(guild, panel, text) {
     embeds: [
       new EmbedBuilder()
         .setColor(GOLD)
-        .setTitle('Audit log | Tickets')
+        .setTitle('Registro | Tickets')
         .setDescription(text)
         .setTimestamp(),
     ],
@@ -486,7 +486,7 @@ async function openTicket(interaction, panel, reason) {
         .setDescription(
           [
             `Ticket de ${interaction.user}`,
-            reason ? `> **Motivo:** ${reason}` : '> Explica tu problema y el staff te atenderá.',
+            reason ? `> **Motivo:** ${reason}` : '> Explica tu problema y el equipo te atenderá.',
           ].join('\n'),
         )
         .setTimestamp(),
@@ -510,12 +510,12 @@ async function handleTicketSlash(interaction) {
   const sub = interaction.options.getSubcommand();
   const { data, store } = guildStore(interaction.guildId);
 
-  if (sub === 'list') {
+  if (sub === 'lista') {
     await interaction.reply({ embeds: [setupListEmbed(store)], ephemeral: true });
     return;
   }
 
-  if (sub === 'create') {
+  if (sub === 'crear') {
     const name = slug(interaction.options.getString('nombre', true));
     if (store.panels[name]) {
       await interaction.reply({ content: `Ya existe el panel \`${name}\`.`, ephemeral: true });
@@ -523,7 +523,7 @@ async function handleTicketSlash(interaction) {
     }
     savePanel(interaction.guildId, emptyPanel(name));
     await interaction.reply({
-      content: `Panel \`${name}\` creado. Usa \`/ticket embed\`, botones, dropdown y luego \`/ticketsetup\`.`,
+      content: `Panel \`${name}\` creado. Usa \`/ticket mensaje\`, \`/ticket boton\`, \`/ticket menu\` y luego \`/ticketsetup\`.`,
       ephemeral: true,
     });
     return;
@@ -536,21 +536,21 @@ async function handleTicketSlash(interaction) {
     return;
   }
 
-  if (sub === 'delete') {
+  if (sub === 'borrar') {
     delete store.panels[name];
     saveData(data);
     await interaction.reply({ content: `Panel \`${name}\` eliminado.`, ephemeral: true });
     return;
   }
 
-  if (sub === 'embed') {
-    const title = interaction.options.getString('title');
-    const body = interaction.options.getString('body');
-    const footer = interaction.options.getString('footer');
+  if (sub === 'mensaje') {
+    const title = interaction.options.getString('titulo');
+    const body = interaction.options.getString('cuerpo');
+    const footer = interaction.options.getString('pie');
     const color = interaction.options.getString('color');
-    const icon = interaction.options.getString('icon_url');
-    const thumbnail = interaction.options.getString('thumbnail_url');
-    const image = interaction.options.getString('image_url');
+    const icon = interaction.options.getString('icono');
+    const thumbnail = interaction.options.getString('miniatura');
+    const image = interaction.options.getString('imagen');
     if (title != null) panel.title = title;
     if (body != null) panel.body = body;
     if (footer != null) panel.footer = footer;
@@ -560,35 +560,35 @@ async function handleTicketSlash(interaction) {
     if (image != null) panel.image = image;
     savePanel(interaction.guildId, panel);
     await interaction.reply({
-      content: `Embed de \`${name}\` actualizado.`,
+      content: `Mensaje de \`${name}\` actualizado.`,
       embeds: [panelEmbed(panel)],
       ephemeral: true,
     });
     return;
   }
 
-  if (sub === 'add-field') {
+  if (sub === 'campo') {
     if (panel.fields.length >= 25) {
-      await interaction.reply({ content: 'Este embed ya tiene 25 fields.', ephemeral: true });
+      await interaction.reply({ content: 'Este mensaje ya tiene 25 campos.', ephemeral: true });
       return;
     }
     panel.fields.push({
       name: interaction.options.getString('titulo', true),
       value: interaction.options.getString('valor', true),
-      inline: interaction.options.getBoolean('inline') || false,
+      inline: interaction.options.getBoolean('en_linea') || false,
     });
     savePanel(interaction.guildId, panel);
-    await interaction.reply({ content: `Field añadido a \`${name}\`.`, ephemeral: true });
+    await interaction.reply({ content: `Campo añadido a \`${name}\`.`, ephemeral: true });
     return;
   }
 
-  if (sub === 'add-button') {
+  if (sub === 'boton') {
     if (panel.buttons.length >= 5) {
       await interaction.reply({ content: 'Máximo 5 botones por panel.', ephemeral: true });
       return;
     }
     panel.buttons.push({
-      label: interaction.options.getString('label', true),
+      label: interaction.options.getString('texto', true),
       style: interaction.options.getString('estilo') || 'azul',
       emoji: interaction.options.getString('emoji') || '',
     });
@@ -597,37 +597,37 @@ async function handleTicketSlash(interaction) {
     return;
   }
 
-  if (sub === 'dropdown') {
+  if (sub === 'menu') {
     panel.dropdown.placeholder =
-      interaction.options.getString('placeholder') || panel.dropdown.placeholder;
+      interaction.options.getString('texto_menu') || panel.dropdown.placeholder;
     savePanel(interaction.guildId, panel);
     await interaction.reply({
-      content: `Dropdown de \`${name}\` listo. Añade opciones con \`/ticket add-option\`.`,
+      content: `Menú de \`${name}\` listo. Añade opciones con \`/ticket opcion\`.`,
       ephemeral: true,
     });
     return;
   }
 
-  if (sub === 'add-option') {
+  if (sub === 'opcion') {
     if (panel.dropdown.options.length >= 25) {
-      await interaction.reply({ content: 'Máximo 25 opciones en el dropdown.', ephemeral: true });
+      await interaction.reply({ content: 'Máximo 25 opciones en el menú.', ephemeral: true });
       return;
     }
     panel.dropdown.options.push({
-      label: interaction.options.getString('label', true),
+      label: interaction.options.getString('texto', true),
       description: interaction.options.getString('descripcion') || 'Abrir ticket',
       emoji: interaction.options.getString('emoji') || '',
     });
     savePanel(interaction.guildId, panel);
-    await interaction.reply({ content: `Opción añadida al dropdown de \`${name}\`.`, ephemeral: true });
+    await interaction.reply({ content: `Opción añadida al menú de \`${name}\`.`, ephemeral: true });
     return;
   }
 
   if (sub === 'destinos') {
     const send = interaction.options.getChannel('enviar_en');
     const category = interaction.options.getChannel('categoria');
-    const audit = interaction.options.getChannel('audit_log');
-    const staff = interaction.options.getRole('staff');
+    const audit = interaction.options.getChannel('registro');
+    const staff = interaction.options.getRole('equipo');
     if (send) panel.sendChannelId = send.id;
     if (category) panel.categoryId = category.id;
     if (audit) panel.auditLogChannelId = audit.id;
@@ -640,7 +640,7 @@ async function handleTicketSlash(interaction) {
     return;
   }
 
-  if (sub === 'preview') {
+  if (sub === 'vista') {
     await interaction.reply({
       embeds: [panelEmbed(panel)],
       components: panelComponents(panel),
@@ -682,7 +682,7 @@ function editModal(panel) {
         textInput('body', 'Cuerpo', TextInputStyle.Paragraph, panel.body, 4000),
       ),
       new ActionRowBuilder().addComponents(
-        textInput('footer', 'Footer', TextInputStyle.Short, panel.footer, 256),
+        textInput('footer', 'Pie de página', TextInputStyle.Short, panel.footer, 256),
       ),
       new ActionRowBuilder().addComponents(
         textInput('image', 'Imagen grande (URL)', TextInputStyle.Short, panel.image, 400),
@@ -749,7 +749,7 @@ async function handleTicketInteraction(interaction) {
     panel.staffRoleId = interaction.values[0];
     savePanel(interaction.guildId, panel);
     await interaction.reply({
-      content: `Staff: <@&${panel.staffRoleId}>`,
+      content: `Equipo: <@&${panel.staffRoleId}>`,
       ephemeral: true,
     });
     return true;
