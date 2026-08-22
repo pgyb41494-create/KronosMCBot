@@ -517,21 +517,13 @@ function pickPayload(store) {
 }
 
 function importModal() {
+  const input = textInput('enlace', 'Enlace del mensaje', TextInputStyle.Paragraph, '', 200, true);
+  input.setPlaceholder('Clic derecho → Copiar enlace del mensaje');
+
   return new ModalBuilder()
     .setCustomId('tksetup_import_modal')
     .setTitle('Importar panel')
-    .addComponents(
-      new ActionRowBuilder().addComponents(
-        textInput(
-          'enlace',
-          'Enlace del mensaje (clic derecho → Copiar enlace)',
-          TextInputStyle.Paragraph,
-          '',
-          200,
-          true,
-        ),
-      ),
-    );
+    .addComponents(new ActionRowBuilder().addComponents(input));
 }
 
 function parseMessageLink(input, fallbackChannelId) {
@@ -911,7 +903,7 @@ async function handleTicketSetupSlash(interaction) {
 function textInput(id, label, style, value, max = 4000, required = false) {
   const input = new TextInputBuilder()
     .setCustomId(id)
-    .setLabel(label)
+    .setLabel(String(label).slice(0, 45))
     .setStyle(style)
     .setRequired(required)
     .setMaxLength(Math.min(max, style === TextInputStyle.Short ? 400 : 4000));
