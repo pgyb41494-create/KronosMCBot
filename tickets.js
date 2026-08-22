@@ -355,141 +355,76 @@ function ticketCommand() {
     .setName('ticket')
     .setDescription('Crea y edita paneles de tickets.')
     .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
-    .addSubcommand((sub) =>
-      sub
-        .setName('crear')
-        .setDescription('Crea un nuevo panel de tickets.')
-        .addStringOption((option) =>
-          option.setName('nombre').setDescription('ID interno del panel.').setRequired(true).setMaxLength(32),
+    .addStringOption((option) =>
+      option
+        .setName('accion')
+        .setDescription('Qué quieres hacer.')
+        .setRequired(true)
+        .addChoices(
+          { name: 'crear', value: 'crear' },
+          { name: 'mensaje', value: 'mensaje' },
+          { name: 'campo', value: 'campo' },
+          { name: 'boton', value: 'boton' },
+          { name: 'menu', value: 'menu' },
+          { name: 'opcion', value: 'opcion' },
+          { name: 'destinos', value: 'destinos' },
+          { name: 'vista', value: 'vista' },
+          { name: 'borrar', value: 'borrar' },
+          { name: 'lista', value: 'lista' },
         ),
     )
-    .addSubcommand((sub) =>
-      sub
-        .setName('mensaje')
-        .setDescription('Edita título, cuerpo, icono, miniatura, imagen grande y pie.')
-        .addStringOption((option) =>
-          option.setName('nombre').setDescription('ID del panel.').setRequired(true),
-        )
-        .addStringOption((option) => option.setName('titulo').setDescription('Título del mensaje.').setMaxLength(256))
-        .addStringOption((option) => option.setName('cuerpo').setDescription('Texto principal.').setMaxLength(4000))
-        .addStringOption((option) => option.setName('pie').setDescription('Pie del mensaje.').setMaxLength(2048))
-        .addStringOption((option) => option.setName('color').setDescription('Color hex, ej. E6B325'))
-        .addStringOption((option) => option.setName('icono').setDescription('URL del icono (esquina).'))
-        .addStringOption((option) => option.setName('miniatura').setDescription('URL de la miniatura.'))
-        .addStringOption((option) =>
-          option.setName('imagen').setDescription('URL de la imagen grande de abajo.'),
+    .addStringOption((option) =>
+      option.setName('nombre').setDescription('ID del panel (todas las acciones menos lista).').setMaxLength(32),
+    )
+    .addStringOption((option) => option.setName('titulo').setDescription('Título (mensaje / campo).').setMaxLength(256))
+    .addStringOption((option) => option.setName('cuerpo').setDescription('Texto principal (mensaje).').setMaxLength(4000))
+    .addStringOption((option) => option.setName('pie').setDescription('Pie del mensaje.').setMaxLength(2048))
+    .addStringOption((option) => option.setName('color').setDescription('Color hex, ej. E6B325'))
+    .addStringOption((option) => option.setName('icono').setDescription('URL del icono.'))
+    .addStringOption((option) => option.setName('miniatura').setDescription('URL de la miniatura.'))
+    .addStringOption((option) => option.setName('imagen').setDescription('URL de la imagen grande.'))
+    .addStringOption((option) => option.setName('valor').setDescription('Texto del campo.').setMaxLength(1024))
+    .addBooleanOption((option) => option.setName('en_linea').setDescription('Campo en la misma fila.'))
+    .addStringOption((option) => option.setName('texto').setDescription('Texto del botón o del menú.').setMaxLength(100))
+    .addStringOption((option) =>
+      option
+        .setName('estilo')
+        .setDescription('Color del botón.')
+        .addChoices(
+          { name: 'Azul', value: 'azul' },
+          { name: 'Gris', value: 'gris' },
+          { name: 'Verde', value: 'verde' },
+          { name: 'Rojo', value: 'rojo' },
         ),
     )
-    .addSubcommand((sub) =>
-      sub
-        .setName('campo')
-        .setDescription('Añade un campo al mensaje.')
-        .addStringOption((option) =>
-          option.setName('nombre').setDescription('ID del panel.').setRequired(true),
-        )
-        .addStringOption((option) =>
-          option.setName('titulo').setDescription('Nombre del campo.').setRequired(true).setMaxLength(256),
-        )
-        .addStringOption((option) =>
-          option.setName('valor').setDescription('Texto del campo.').setRequired(true).setMaxLength(1024),
-        )
-        .addBooleanOption((option) => option.setName('en_linea').setDescription('¿En la misma fila?')),
+    .addStringOption((option) => option.setName('emoji').setDescription('Emoji opcional.'))
+    .addStringOption((option) =>
+      option.setName('texto_menu').setDescription('Texto del menú desplegable.').setMaxLength(150),
     )
-    .addSubcommand((sub) =>
-      sub
-        .setName('boton')
-        .setDescription('Añade un botón que abre un ticket.')
-        .addStringOption((option) =>
-          option.setName('nombre').setDescription('ID del panel.').setRequired(true),
-        )
-        .addStringOption((option) =>
-          option.setName('texto').setDescription('Texto del botón.').setRequired(true).setMaxLength(80),
-        )
-        .addStringOption((option) =>
-          option
-            .setName('estilo')
-            .setDescription('Color del botón.')
-            .addChoices(
-              { name: 'Azul', value: 'azul' },
-              { name: 'Gris', value: 'gris' },
-              { name: 'Verde', value: 'verde' },
-              { name: 'Rojo', value: 'rojo' },
-            ),
-        )
-        .addStringOption((option) => option.setName('emoji').setDescription('Emoji opcional.')),
+    .addStringOption((option) =>
+      option.setName('descripcion').setDescription('Descripción de una opción del menú.').setMaxLength(100),
     )
-    .addSubcommand((sub) =>
-      sub
-        .setName('menu')
-        .setDescription('Activa o cambia el texto del menú desplegable.')
-        .addStringOption((option) =>
-          option.setName('nombre').setDescription('ID del panel.').setRequired(true),
-        )
-        .addStringOption((option) =>
-          option.setName('texto_menu').setDescription('Texto del menú desplegable.').setMaxLength(150),
-        ),
+    .addChannelOption((option) =>
+      option
+        .setName('enviar_en')
+        .setDescription('Canal donde se envía el panel.')
+        .addChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement),
     )
-    .addSubcommand((sub) =>
-      sub
-        .setName('opcion')
-        .setDescription('Añade una opción al menú desplegable.')
-        .addStringOption((option) =>
-          option.setName('nombre').setDescription('ID del panel.').setRequired(true),
-        )
-        .addStringOption((option) =>
-          option.setName('texto').setDescription('Texto de la opción.').setRequired(true).setMaxLength(100),
-        )
-        .addStringOption((option) =>
-          option.setName('descripcion').setDescription('Descripción corta.').setMaxLength(100),
-        )
-        .addStringOption((option) => option.setName('emoji').setDescription('Emoji opcional.')),
+    .addChannelOption((option) =>
+      option
+        .setName('categoria')
+        .setDescription('Categoría donde se abren los tickets.')
+        .addChannelTypes(ChannelType.GuildCategory),
     )
-    .addSubcommand((sub) =>
-      sub
-        .setName('destinos')
-        .setDescription('Canal del panel, categoría de tickets y registro.')
-        .addStringOption((option) =>
-          option.setName('nombre').setDescription('ID del panel.').setRequired(true),
-        )
-        .addChannelOption((option) =>
-          option
-            .setName('enviar_en')
-            .setDescription('Dónde se envía el mensaje del panel.')
-            .addChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement),
-        )
-        .addChannelOption((option) =>
-          option
-            .setName('categoria')
-            .setDescription('Categoría donde se abren los tickets.')
-            .addChannelTypes(ChannelType.GuildCategory),
-        )
-        .addChannelOption((option) =>
-          option
-            .setName('registro')
-            .setDescription('Canal de registro de todos los tickets.')
-            .addChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement),
-        )
-        .addRoleOption((option) =>
-          option.setName('equipo').setDescription('Rol que puede ver los tickets.'),
-        ),
+    .addChannelOption((option) =>
+      option
+        .setName('registro')
+        .setDescription('Canal de registro de todos los tickets.')
+        .addChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement),
     )
-    .addSubcommand((sub) =>
-      sub
-        .setName('vista')
-        .setDescription('Muestra una vista previa del panel.')
-        .addStringOption((option) =>
-          option.setName('nombre').setDescription('ID del panel.').setRequired(true),
-        ),
-    )
-    .addSubcommand((sub) =>
-      sub
-        .setName('borrar')
-        .setDescription('Borra un panel.')
-        .addStringOption((option) =>
-          option.setName('nombre').setDescription('ID del panel.').setRequired(true),
-        ),
-    )
-    .addSubcommand((sub) => sub.setName('lista').setDescription('Lista todos los paneles.'));
+    .addRoleOption((option) =>
+      option.setName('equipo').setDescription('Rol que puede ver los tickets.'),
+    );
 }
 
 function ticketSetupCommand() {
@@ -619,7 +554,7 @@ async function openTicket(interaction, panel, reason) {
 }
 
 async function handleTicketSlash(interaction) {
-  const sub = interaction.options.getSubcommand();
+  const sub = interaction.options.getString('accion', true);
   const { data, store } = guildStore(interaction.guildId);
 
   if (sub === 'lista') {
@@ -627,21 +562,30 @@ async function handleTicketSlash(interaction) {
     return;
   }
 
+  const rawName = interaction.options.getString('nombre');
+  if (!rawName) {
+    await interaction.reply({
+      content: 'Esta acción necesita la opción **nombre**.',
+      ephemeral: true,
+    });
+    return;
+  }
+
+  const name = slug(rawName);
+
   if (sub === 'crear') {
-    const name = slug(interaction.options.getString('nombre', true));
     if (store.panels[name]) {
       await interaction.reply({ content: `Ya existe el panel \`${name}\`.`, ephemeral: true });
       return;
     }
     savePanel(interaction.guildId, emptyPanel(name));
     await interaction.reply({
-      content: `Panel \`${name}\` creado. Usa \`/ticket mensaje\`, \`/ticket boton\`, \`/ticket menu\` y luego \`/ticketsetup\`.`,
+      content: `Panel \`${name}\` creado. Usa \`/ticket\` con acción **mensaje**, **boton** o **menu**, y luego \`/ticketsetup\`.`,
       ephemeral: true,
     });
     return;
   }
 
-  const name = slug(interaction.options.getString('nombre', true));
   const panel = store.panels[name];
   if (!panel) {
     await interaction.reply({ content: `No existe el panel \`${name}\`.`, ephemeral: true });
@@ -680,13 +624,19 @@ async function handleTicketSlash(interaction) {
   }
 
   if (sub === 'campo') {
+    const fieldTitle = interaction.options.getString('titulo');
+    const fieldValue = interaction.options.getString('valor');
+    if (!fieldTitle || !fieldValue) {
+      await interaction.reply({ content: 'Campo necesita **titulo** y **valor**.', ephemeral: true });
+      return;
+    }
     if (panel.fields.length >= 25) {
       await interaction.reply({ content: 'Este mensaje ya tiene 25 campos.', ephemeral: true });
       return;
     }
     panel.fields.push({
-      name: interaction.options.getString('titulo', true),
-      value: interaction.options.getString('valor', true),
+      name: fieldTitle,
+      value: fieldValue,
       inline: interaction.options.getBoolean('en_linea') || false,
     });
     savePanel(interaction.guildId, panel);
@@ -695,12 +645,17 @@ async function handleTicketSlash(interaction) {
   }
 
   if (sub === 'boton') {
+    const label = interaction.options.getString('texto');
+    if (!label) {
+      await interaction.reply({ content: 'Botón necesita **texto**.', ephemeral: true });
+      return;
+    }
     if (panel.buttons.length >= 5) {
       await interaction.reply({ content: 'Máximo 5 botones por panel.', ephemeral: true });
       return;
     }
     panel.buttons.push({
-      label: interaction.options.getString('texto', true),
+      label,
       style: interaction.options.getString('estilo') || 'azul',
       emoji: interaction.options.getString('emoji') || '',
     });
@@ -714,19 +669,24 @@ async function handleTicketSlash(interaction) {
       interaction.options.getString('texto_menu') || panel.dropdown.placeholder;
     savePanel(interaction.guildId, panel);
     await interaction.reply({
-      content: `Menú de \`${name}\` listo. Añade opciones con \`/ticket opcion\`.`,
+      content: `Menú de \`${name}\` listo. Añade opciones con \`/ticket\` acción **opcion**.`,
       ephemeral: true,
     });
     return;
   }
 
   if (sub === 'opcion') {
+    const optionLabel = interaction.options.getString('texto');
+    if (!optionLabel) {
+      await interaction.reply({ content: 'Opción necesita **texto**.', ephemeral: true });
+      return;
+    }
     if (panel.dropdown.options.length >= 25) {
       await interaction.reply({ content: 'Máximo 25 opciones en el menú.', ephemeral: true });
       return;
     }
     panel.dropdown.options.push({
-      label: interaction.options.getString('texto', true),
+      label: optionLabel,
       description: interaction.options.getString('descripcion') || 'Abrir ticket',
       emoji: interaction.options.getString('emoji') || '',
     });
