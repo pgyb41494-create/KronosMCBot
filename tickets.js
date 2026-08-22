@@ -108,21 +108,73 @@ function parseColor(value) {
   return Number.isNaN(num) ? GOLD : num;
 }
 
-function panelEmbed(panel) {
+function applyVars(text, ctx = {}) {
+  if (text == null || text === '') return text;
+  const user = ctx.user;
+  const guild = ctx.guild;
+  const map = {
+    '{user}': user ? `<@${user.id}>` : '{user}',
+    '{usuario}': user ? `<@${user.id}>` : '{usuario}',
+    '{username}': user?.username ?? '{username}',
+    '{usertag}': user?.tag ?? user?.username ?? '{usertag}',
+    '{userid}': user?.id ?? '{userid}',
+    '{server}': guild?.name ?? '{server}',
+    '{servidor}': guild?.name ?? '{servidor}',
+    '{serverid}': guild?.id ?? '{serverid}',
+    '{membercount}': guild?.memberCount != null ? String(guild.memberCount) : '{membercount}',
+    '{miembros}': guild?.memberCount != null ? String(guild.memberCount) : '{miembros}',
+    '{channel}': ctx.channel ? `<#${ctx.channel.id}>` : '{channel}',
+    '{canal}': ctx.channel ? `<#${ctx.channel.id}>` : '{canal}',
+    '{motivo}': ctx.reason || '{motivo}',
+    '{reason}': ctx.reason || '{reason}',
+    '{staff}': ctx.staff || '{staff}',
+    '{panel}': ctx.panelName || '{panel}',
+  };
+
+  let out = String(text);
+  for (const [key, value] of Object.entries(map)) {
+    out = out.split(key).join(String(value));
+  }
+  return out;
+}
+
+function varsHelpEmbed() {
+  return new EmbedBuilder()
+    .setColor(GOLD)
+    .setTitle('Variables')
+    .setDescription('Puedes usar estas variables en título, cuerpo, pie, campos, botones y menú.')
+    .addFields(
+      {
+        name: 'Usuario',
+        value: '`{user}` `{usuario}` `{username}` `{usertag}` `{userid}`',
+      },
+      {
+        name: 'Servidor',
+        value: '`{server}` `{servidor}` `{serverid}` `{membercount}` `{miembros}`',
+      },
+      {
+        name: 'Ticket',
+        value: '`{channel}` `{canal}` `{motivo}` `{reason}` `{staff}` `{panel}`',
+      },
+    );
+}
+
+function panelEmbed(panel, ctx = {}) {
+  const title = applyVars(panel.title || 'Tickets', ctx).slice(0, 256);
   const embed = new EmbedBuilder()
     .setColor(panel.color || GOLD)
-    .setTitle(panel.title || 'Tickets')
-    .setDescription(panel.body || ' ');
+    .setTitle(title || 'Tickets')
+    .setDescription(applyVars(panel.body || ' ', ctx).slice(0, 4096));
 
-  if (panel.icon) embed.setAuthor({ name: panel.title || 'Tickets', iconURL: panel.icon });
-  if (panel.thumbnail) embed.setThumbnail(panel.thumbnail);
-  if (panel.image) embed.setImage(panel.image);
-  if (panel.footer) embed.setFooter({ text: panel.footer });
+  if (panel.icon) embed.setAuthor({ name: title || 'Tickets', iconURL: panel.icon });
+  if (panel.thumbnail) embed.setThumbnail(applyVars(panel.thumbnail, ctx));
+  if (panel.image) embed.setImage(applyVars(panel.image, ctx));
+  if (panel.footer) embed.setFooter({ text: applyVars(panel.footer, ctx).slice(0, 2048) });
   if (panel.fields?.length) {
     embed.addFields(
       panel.fields.map((field) => ({
-        name: field.name,
-        value: field.value,
+        name: applyVars(field.name, ctx).slice(0, 256),
+        value: applyVars(field.value, ctx).slice(0, 1024),
         inline: Boolean(field.inline),
       })),
     );
@@ -131,7 +183,7 @@ function panelEmbed(panel) {
   return embed;
 }
 
-function panelComponents(panel) {
+function panelComponents(panel, ctx = {}) {
   const rows = [];
 
   if (panel.buttons?.length) {
@@ -139,7 +191,7 @@ function panelComponents(panel) {
     for (const [index, button] of panel.buttons.slice(0, 5).entries()) {
       const built = new ButtonBuilder()
         .setCustomId(`tkbtn:${panel.name}:${index}`)
-        .setLabel(button.label.slice(0, 80))
+        .setLabel(applyVars(button.label, ctx).slice(0, 80))
         .setStyle(BUTTON_STYLES[button.style] || ButtonStyle.Primary);
       if (button.emoji) built.setEmoji(button.emoji);
       row.addComponents(built);
@@ -150,13 +202,13 @@ function panelComponents(panel) {
   if (panel.dropdown?.options?.length) {
     const menu = new StringSelectMenuBuilder()
       .setCustomId(`tkdd:${panel.name}`)
-      .setPlaceholder(panel.dropdown.placeholder || 'Selecciona una opción')
+      .setPlaceholder(applyVars(panel.dropdown.placeholder || 'Selecciona una opción', ctx).slice(0, 150))
       .addOptions(
         panel.dropdown.options.slice(0, 25).map((option, index) => {
           const item = {
-            label: option.label.slice(0, 100),
+            label: applyVars(option.label, ctx).slice(0, 100),
             value: String(index),
-            description: (option.description || 'Abrir ticket').slice(0, 100),
+            description: applyVars(option.description || 'Abrir ticket', ctx).slice(0, 100),
           };
           if (option.emoji) item.emoji = option.emoji;
           return item;
@@ -243,7 +295,7 @@ const SETUP_STEPS = [
   {
     id: 5,
     title: 'Paso 5 de 8 · Editar mensaje',
-    hint: 'Cambia título, cuerpo, pie e imágenes.',
+    hint: 'Cambia título, cuerpo, pie e imágenes. Puedes usar variables como `{user}` y `{server}`.',
   },
   {
     id: 6,
@@ -400,7 +452,8 @@ function wizardPayload(panel, step) {
   rows.push(wizardNav(panel, step));
 
   const embeds = [embed];
-  if (step === 5 || step === 8) embeds.push(panelEmbed(panel));
+  if (step === 5) embeds.push(varsHelpEmbed(), panelEmbed(panel));
+  if (step === 8) embeds.push(panelEmbed(panel));
   if (step === 6) {
     embeds.push(
       new EmbedBuilder()
@@ -654,20 +707,18 @@ async function openTicket(interaction, panel, reason) {
       .setStyle(ButtonStyle.Danger),
   );
 
+  const ctx = {
+    user: interaction.user,
+    guild: interaction.guild,
+    channel,
+    reason: reason || '',
+    staff: staffMentions(panel),
+    panelName: panel.name,
+  };
+
   await channel.send({
-    content: `${interaction.user}${staffIds(panel).length ? ` | ${staffMentions(panel)}` : ''}`,
-    embeds: [
-      new EmbedBuilder()
-        .setColor(panel.color || GOLD)
-        .setTitle(panel.title || 'Ticket')
-        .setDescription(
-          [
-            `Ticket de ${interaction.user}`,
-            reason ? `> **Motivo:** ${reason}` : '> Explica tu problema y el equipo te atenderá.',
-          ].join('\n'),
-        )
-        .setTimestamp(),
-    ],
+    content: applyVars(`{user}${staffIds(panel).length ? ' | {staff}' : ''}`, ctx),
+    embeds: [panelEmbed(panel, ctx)],
     components: [closeRow],
   });
 
@@ -1059,9 +1110,10 @@ async function handleTicketInteraction(interaction) {
       return true;
     }
 
+    const publishCtx = { guild: interaction.guild, panelName: panel.name };
     const payload = {
-      embeds: [panelEmbed(panel)],
-      components: panelComponents(panel),
+      embeds: [panelEmbed(panel, publishCtx)],
+      components: panelComponents(panel, publishCtx),
     };
 
     let published = 'enviado';
