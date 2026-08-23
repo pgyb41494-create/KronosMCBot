@@ -110,7 +110,7 @@ function normalizePanel(panel) {
   if (!Array.isArray(panel.items)) panel.items = [];
   if (!panel.dropdown) panel.dropdown = { placeholder: 'Selecciona una opción', options: [] };
   if (!Array.isArray(panel.buttons)) panel.buttons = [];
-  if (!panel.componentMode) {
+  if (!panel.componentMode && !panel.items.length) {
     if (panel.dropdown.options?.length) panel.componentMode = 'dropdown';
     else if (panel.buttons.length) panel.componentMode = 'buttons';
   }
@@ -1488,9 +1488,6 @@ async function handleTicketInteraction(interaction) {
       return true;
     }
     panel.componentMode = null;
-    panel.items = [];
-    panel.buttons = [];
-    panel.dropdown = { placeholder: panel.dropdown?.placeholder || 'Selecciona una opción', options: [] };
     savePanel(interaction.guildId, panel);
     await interaction.update(wizardPayload(panel, 7));
     return true;
