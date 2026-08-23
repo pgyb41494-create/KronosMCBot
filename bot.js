@@ -9,7 +9,8 @@ const {
   ActivityType,
   Events,
 } = require('discord.js');
-const { ticketCommand, ticketSetupCommand, handleTicketInteraction } = require('./tickets');
+const { ticketCommand, ticketSetupCommand, handleTicketInteraction, handleTicketSetupPrefix } = require('./tickets');
+const { emojiCommand, handleEmojiSlash, handleEmojiPrefix } = require('./emojis');
 
 
 
@@ -38,6 +39,7 @@ let botOnlineStatus = 'online';
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
+    GatewayIntentBits.GuildMessages,
     GatewayIntentBits.DirectMessages,
     GatewayIntentBits.MessageContent,
   ],
@@ -73,6 +75,7 @@ const commands = [
     ),
   ticketCommand(),
   ticketSetupCommand(),
+  emojiCommand(),
 ].map((command) => command.toJSON());
 
 function ipEmbed() {
@@ -153,10 +156,28 @@ client.on(Events.GuildCreate, async (guild) => {
 });
 
 client.on(Events.MessageCreate, async (message) => {
-  if (message.author.bot || message.guild) return;
-  if (message.content.trim().toLowerCase() !== CLAIM_CODE.toLowerCase()) return;
+  if (message.author.bot) return;
 
-  await message.reply({ embeds: [claimEmbed()] });
+  if (!message.guild) {
+    if (message.content.trim().toLowerCase() === CLAIM_CODE.toLowerCase()) {
+      await message.reply({ embeds: [claimEmbed()] });
+    }
+    return;
+  }
+
+  if (!message.content.startsWith('!')) return;
+  const body = message.content.slice(1).trim();
+  const space = body.indexOf(' ');
+  const cmd = (space === -1 ? body : body.slice(0, space)).toLowerCase();
+  const rest = space === -1 ? '' : body.slice(space + 1);
+
+  if (cmd === 'emojisteal') {
+    await handleEmojiPrefix(message, rest);
+    return;
+  }
+  if (cmd === 'ticketsetup') {
+    await handleTicketSetupPrefix(message);
+  }
 });
 
 client.on(Events.InteractionCreate, async (interaction) => {
@@ -171,6 +192,11 @@ client.on(Events.InteractionCreate, async (interaction) => {
   }
 
   if (!interaction.isChatInputCommand()) return;
+
+  if (interaction.commandName === 'emojisteal') {
+    await handleEmojiSlash(interaction);
+    return;
+  }
 
   if (interaction.commandName === 'ip') {
     await interaction.reply({ embeds: [ipEmbed()] });

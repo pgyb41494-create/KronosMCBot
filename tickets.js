@@ -79,6 +79,8 @@ function emptyPanel(name) {
     fields: [],
     buttons: [],
     dropdown: { placeholder: 'Selecciona una opción', options: [] },
+    items: [],
+    componentMode: null,
     sendChannelId: null,
     categoryId: null,
     auditLogChannelId: null,
@@ -100,7 +102,45 @@ function getPanel(guildId, name) {
   if (!panel.ticketBody) {
     panel.ticketBody = 'Hola {user}, gracias por abrir un ticket.\n> Motivo: {motivo}\nEl equipo te atenderá pronto.';
   }
+  normalizePanel(panel);
   return panel;
+}
+
+function normalizePanel(panel) {
+  if (!Array.isArray(panel.items)) panel.items = [];
+  if (!panel.dropdown) panel.dropdown = { placeholder: 'Selecciona una opción', options: [] };
+  if (!Array.isArray(panel.buttons)) panel.buttons = [];
+  if (!panel.componentMode) {
+    if (panel.dropdown.options?.length) panel.componentMode = 'dropdown';
+    else if (panel.buttons.length) panel.componentMode = 'buttons';
+  }
+  if (!panel.items.length) {
+    if (panel.componentMode === 'dropdown' && panel.dropdown.options?.length) {
+      panel.items = panel.dropdown.options.map((option) => ({
+        label: option.label,
+        description: option.description || '',
+        emoji: option.emoji || '',
+        style: 'azul',
+        categoryId: option.categoryId || '',
+        roleId: option.roleId || '',
+      }));
+    } else if (panel.buttons.length) {
+      panel.items = panel.buttons.map((button) => ({
+        label: button.label,
+        description: '',
+        emoji: button.emoji || '',
+        style: button.style || 'azul',
+        categoryId: button.categoryId || '',
+        roleId: button.roleId || '',
+      }));
+    }
+  }
+  return panel;
+}
+
+function panelItems(panel) {
+  normalizePanel(panel);
+  return panel.items || [];
 }
 
 function staffIds(panel) {
@@ -121,10 +161,45 @@ function savePanel(guildId, panel) {
 }
 
 function parseColor(value) {
-  if (!value) return GOLD;
-  const hex = value.replace('#', '').trim();
+  if (value == null || value === '') return GOLD;
+  if (typeof value === 'number' && Number.isFinite(value)) return value;
+  let hex = String(value).trim();
+  if (/^0x/i.test(hex)) hex = hex.slice(2);
+  hex = hex.replace('#', '');
   const num = Number.parseInt(hex, 16);
   return Number.isNaN(num) ? GOLD : num;
+}
+
+function colorHex(value) {
+  return `#${Number(value || GOLD).toString(16).padStart(6, '0').toUpperCase()}`;
+}
+
+function serializeEmoji(emoji) {
+  if (!emoji) return '';
+  if (typeof emoji === 'string') return emoji;
+  if (emoji.id) return `<${emoji.animated ? 'a' : ''}:${emoji.name || 'emoji'}:${emoji.id}>`;
+  return emoji.name || '';
+}
+
+function parseComponentEmoji(raw, guild) {
+  const text = String(raw || '').trim();
+  if (!text) return null;
+  const custom = text.match(/<(a)?:([a-zA-Z0-9_]+):(\d{17,20})>/);
+  if (custom) {
+    return { animated: Boolean(custom[1]), name: custom[2], id: custom[3] };
+  }
+  const idOnly = text.match(/^(\d{17,20})$/);
+  if (idOnly) {
+    const cached = guild?.emojis?.cache.get(idOnly[1]);
+    if (cached) return { animated: cached.animated, name: cached.name, id: cached.id };
+    return { id: idOnly[1] };
+  }
+  const named = text.replace(/:/g, '');
+  const fromGuild = guild?.emojis?.cache.find((emoji) => emoji.name === named);
+  if (fromGuild) {
+    return { animated: fromGuild.animated, name: fromGuild.name, id: fromGuild.id };
+  }
+  return text;
 }
 
 function applyVars(text, ctx = {}) {
@@ -202,32 +277,40 @@ function panelEmbed(panel, ctx = {}) {
 
 function panelComponents(panel, ctx = {}) {
   const rows = [];
+  const items = panelItems(panel);
+  const mode = panel.componentMode;
+  const guild = ctx.guild;
 
-  if (panel.buttons?.length) {
-    const row = new ActionRowBuilder();
-    for (const [index, button] of panel.buttons.slice(0, 5).entries()) {
-      const built = new ButtonBuilder()
-        .setCustomId(`tkbtn:${panel.name}:${index}`)
-        .setLabel(applyVars(button.label, ctx).slice(0, 80))
-        .setStyle(BUTTON_STYLES[button.style] || ButtonStyle.Primary);
-      if (button.emoji) built.setEmoji(button.emoji);
-      row.addComponents(built);
+  if (mode === 'buttons' && items.length) {
+    for (let start = 0; start < Math.min(items.length, 25); start += 5) {
+      const row = new ActionRowBuilder();
+      for (const [offset, item] of items.slice(start, start + 5).entries()) {
+        const index = start + offset;
+        const built = new ButtonBuilder()
+          .setCustomId(`tkbtn:${panel.name}:${index}`)
+          .setLabel(applyVars(item.label, ctx).slice(0, 80))
+          .setStyle(BUTTON_STYLES[item.style] || ButtonStyle.Primary);
+        const emoji = parseComponentEmoji(item.emoji, guild);
+        if (emoji) built.setEmoji(emoji);
+        row.addComponents(built);
+      }
+      rows.push(row);
     }
-    rows.push(row);
   }
 
-  if (panel.dropdown?.options?.length) {
+  if (mode === 'dropdown' && items.length) {
     const menu = new StringSelectMenuBuilder()
       .setCustomId(`tkdd:${panel.name}`)
       .setPlaceholder(applyVars(panel.dropdown.placeholder || 'Selecciona una opción', ctx).slice(0, 150))
       .addOptions(
-        panel.dropdown.options.slice(0, 25).map((option, index) => {
+        items.slice(0, 25).map((option, index) => {
           const item = {
             label: applyVars(option.label, ctx).slice(0, 100),
             value: String(index),
             description: applyVars(option.description || 'Abrir ticket', ctx).slice(0, 100),
           };
-          if (option.emoji) item.emoji = option.emoji;
+          const emoji = parseComponentEmoji(option.emoji, guild);
+          if (emoji) item.emoji = emoji;
           return item;
         }),
       );
@@ -287,51 +370,46 @@ function setupSelectRow(store) {
   );
 }
 
-const LAST_SETUP_STEP = 9;
+const LAST_SETUP_STEP = 8;
 const SETUP_STEPS = [
   {
     id: 1,
-    title: 'Paso 1 de 9 · Canal del mensaje',
+    title: 'Paso 1 de 8 · Canal del mensaje',
     hint: 'Elige dónde se envía el panel de tickets.',
   },
   {
     id: 2,
-    title: 'Paso 2 de 9 · Categoría',
-    hint: 'Los tickets nuevos se abrirán en esta categoría.',
+    title: 'Paso 2 de 8 · Categoría',
+    hint: 'Los tickets nuevos se abrirán en esta categoría (por defecto).',
   },
   {
     id: 3,
-    title: 'Paso 3 de 9 · Registro',
+    title: 'Paso 3 de 8 · Registro',
     hint: 'Canal de registro de todos los tickets (abrir y cerrar).',
   },
   {
     id: 4,
-    title: 'Paso 4 de 9 · Equipo',
+    title: 'Paso 4 de 8 · Equipo',
     hint: 'Puedes elegir más de un rol. Esos roles verán los tickets.',
   },
   {
     id: 5,
-    title: 'Paso 5 de 9 · Mensaje del panel',
-    hint: 'Este embed es el que se publica en el canal (título, cuerpo, imágenes).',
+    title: 'Paso 5 de 8 · Mensaje del panel',
+    hint: 'Este embed es el que se publica en el canal (título, cuerpo, color, imágenes).',
   },
   {
     id: 6,
-    title: 'Paso 6 de 9 · Mensaje dentro del ticket',
+    title: 'Paso 6 de 8 · Mensaje dentro del ticket',
     hint: 'Este texto aparece dentro del canal cuando alguien abre un ticket.',
   },
   {
     id: 7,
-    title: 'Paso 7 de 9 · Botones',
-    hint: 'Añade botones que abren un ticket. Máximo 5.',
+    title: 'Paso 7 de 8 · Tipo de panel',
+    hint: 'Elige **Menú desplegable** o **Botones**. Después de elegir, el tipo se bloquea y puedes añadir opciones.',
   },
   {
     id: 8,
-    title: 'Paso 8 de 9 · Menú desplegable',
-    hint: 'Añade un dropdown con opciones que abren un ticket.',
-  },
-  {
-    id: 9,
-    title: 'Paso 9 de 9 · Republicar',
+    title: 'Paso 8 de 8 · Republicar',
     hint: 'Revisa todo y publica el panel otra vez con la nueva configuración.',
   },
 ];
@@ -343,6 +421,8 @@ function panelSummary(panel) {
     `> **Categoría:** ${panel.categoryId ? `<#${panel.categoryId}>` : 'sin asignar'}`,
     `> **Registro:** ${panel.auditLogChannelId ? `<#${panel.auditLogChannelId}>` : 'sin asignar'}`,
     `> **Equipo:** ${staffMentions(panel)}`,
+    `> **Color:** \`${colorHex(panel.color)}\``,
+    `> **Tipo:** ${panel.componentMode === 'dropdown' ? 'menú desplegable' : panel.componentMode === 'buttons' ? 'botones' : 'sin elegir'}`,
   ].join('\n');
 }
 
@@ -435,6 +515,10 @@ function wizardPayload(panel, step) {
           .setCustomId(`tksetup_edit:${panel.name}`)
           .setLabel('Editar texto')
           .setStyle(ButtonStyle.Primary),
+        new ButtonBuilder()
+          .setCustomId(`tksetup_color:${panel.name}`)
+          .setLabel('Color HEX')
+          .setStyle(ButtonStyle.Secondary),
       ),
     );
   }
@@ -451,37 +535,61 @@ function wizardPayload(panel, step) {
   }
 
   if (step === 7) {
-    rows.push(
-      new ActionRowBuilder().addComponents(
+    if (!panel.componentMode) {
+      rows.push(
+        new ActionRowBuilder().addComponents(
+          new ButtonBuilder()
+            .setCustomId(`tksetup_mode_dd:${panel.name}`)
+            .setLabel('Menú desplegable')
+            .setStyle(ButtonStyle.Primary),
+          new ButtonBuilder()
+            .setCustomId(`tksetup_mode_btn:${panel.name}`)
+            .setLabel('Botones')
+            .setStyle(ButtonStyle.Success),
+        ),
+      );
+    } else {
+      const ops = [
         new ButtonBuilder()
-          .setCustomId(`tksetup_addbtn:${panel.name}`)
-          .setLabel('Añadir botón')
-          .setStyle(ButtonStyle.Primary),
-        new ButtonBuilder()
-          .setCustomId(`tksetup_clearbtn:${panel.name}`)
-          .setLabel('Borrar botones')
-          .setStyle(ButtonStyle.Danger),
-      ),
-    );
-  }
-
-  if (step === 8) {
-    rows.push(
-      new ActionRowBuilder().addComponents(
-        new ButtonBuilder()
-          .setCustomId(`tksetup_editmenu:${panel.name}`)
-          .setLabel('Texto del menú')
-          .setStyle(ButtonStyle.Secondary),
-        new ButtonBuilder()
-          .setCustomId(`tksetup_addopt:${panel.name}`)
+          .setCustomId(`tksetup_additem:${panel.name}`)
           .setLabel('Añadir opción')
           .setStyle(ButtonStyle.Primary),
         new ButtonBuilder()
-          .setCustomId(`tksetup_clearmenu:${panel.name}`)
-          .setLabel('Borrar menú')
+          .setCustomId(`tksetup_clearitems:${panel.name}`)
+          .setLabel('Vaciar lista')
           .setStyle(ButtonStyle.Danger),
-      ),
-    );
+        new ButtonBuilder()
+          .setCustomId(`tksetup_mode_reset:${panel.name}`)
+          .setLabel('Cambiar tipo')
+          .setStyle(ButtonStyle.Secondary),
+      ];
+      if (panel.componentMode === 'dropdown') {
+        ops.unshift(
+          new ButtonBuilder()
+            .setCustomId(`tksetup_editmenu:${panel.name}`)
+            .setLabel('Texto del menú')
+            .setStyle(ButtonStyle.Secondary),
+        );
+      }
+      rows.push(new ActionRowBuilder().addComponents(ops.slice(0, 5)));
+      const items = panelItems(panel);
+      if (items.length) {
+        rows.push(
+          new ActionRowBuilder().addComponents(
+            new StringSelectMenuBuilder()
+              .setCustomId(`tksetup_rmpick:${panel.name}`)
+              .setPlaceholder('Quitar una opción')
+              .addOptions(
+                items.slice(0, 25).map((item, index) => ({
+                  label: `Quitar: ${item.label}`.slice(0, 100),
+                  value: String(index),
+                  description: (item.description || 'Eliminar esta opción').slice(0, 100),
+                })),
+              ),
+          ),
+        );
+      }
+    }
   }
 
   rows.push(wizardNav(panel, step));
@@ -489,31 +597,34 @@ function wizardPayload(panel, step) {
   const embeds = [embed];
   if (step === 5) embeds.push(panelEmbed(panel));
   if (step === 6) embeds.push(ticketInsideEmbed(panel));
-  if (step === 9) embeds.push(panelEmbed(panel), ticketInsideEmbed(panel));
+  if (step === 8) embeds.push(panelEmbed(panel), ticketInsideEmbed(panel));
   if (step === 7) {
+    const items = panelItems(panel);
+    const locked = panel.componentMode
+      ? panel.componentMode === 'dropdown'
+        ? 'Menú desplegable (bloqueado)'
+        : 'Botones (bloqueado)'
+      : 'Sin elegir — pulsa un botón de arriba';
     embeds.push(
       new EmbedBuilder()
-        .setColor(GOLD)
-        .setTitle('Botones actuales')
-        .setDescription(
-          panel.buttons?.length
-            ? panel.buttons.map((button, index) => `> ${index + 1}. **${button.label}** (${button.style})`).join('\n')
-            : '> No hay botones todavía.',
-        ),
-    );
-  }
-  if (step === 8) {
-    embeds.push(
-      new EmbedBuilder()
-        .setColor(GOLD)
-        .setTitle('Menú desplegable')
+        .setColor(panel.color || GOLD)
+        .setTitle(locked)
         .setDescription(
           [
-            `> Placeholder: **${panel.dropdown?.placeholder || 'Selecciona una opción'}**`,
-            panel.dropdown?.options?.length
-              ? panel.dropdown.options.map((option, index) => `> ${index + 1}. ${option.label}`).join('\n')
-              : '> No hay opciones todavía.',
-          ].join('\n'),
+            panel.componentMode === 'dropdown'
+              ? `> Texto del menú: **${panel.dropdown?.placeholder || 'Selecciona una opción'}**`
+              : null,
+            items.length
+              ? items
+                  .map(
+                    (item, index) =>
+                      `> ${index + 1}. ${item.emoji ? `${item.emoji} ` : ''}**${item.label}**${item.description ? `\n> ${item.description}` : ''}${item.categoryId ? `\n> Categoría: <#${item.categoryId}>` : ''}${item.roleId ? `\n> Rol: <@&${item.roleId}>` : ''}`,
+                  )
+                  .join('\n')
+              : '> No hay opciones todavía. Usa **Añadir opción**.',
+          ]
+            .filter(Boolean)
+            .join('\n'),
         ),
     );
   }
@@ -594,6 +705,8 @@ function panelFromMessage(message) {
 
   panel.buttons = [];
   panel.dropdown = { placeholder: 'Selecciona una opción', options: [] };
+  panel.items = [];
+  panel.componentMode = null;
 
   for (const row of message.components || []) {
     for (const component of row.components || []) {
@@ -601,7 +714,7 @@ function panelFromMessage(message) {
         panel.buttons.push({
           label: component.label || 'Ticket',
           style: styleFromDiscord(component.style),
-          emoji: component.emoji?.name || '',
+          emoji: serializeEmoji(component.emoji),
         });
       }
       if (component.type === 3 || component.options) {
@@ -609,11 +722,15 @@ function panelFromMessage(message) {
         panel.dropdown.options = (component.options || []).map((option) => ({
           label: option.label,
           description: option.description || 'Abrir ticket',
-          emoji: option.emoji?.name || '',
+          emoji: serializeEmoji(option.emoji),
         }));
       }
     }
   }
+
+  if (panel.dropdown.options.length) panel.componentMode = 'dropdown';
+  else if (panel.buttons.length) panel.componentMode = 'buttons';
+  normalizePanel(panel);
 
   panel.sendChannelId = message.channelId;
   panel.messageId = message.id;
@@ -661,7 +778,7 @@ async function importPanelFromLink(interaction, link) {
   try {
     await message.edit({
       embeds: message.embeds,
-      components: panelComponents(panel),
+      components: panelComponents(panel, { guild: interaction.guild }),
     });
   } catch (error) {
     console.error('Could not rebind imported panel message:', error);
@@ -757,14 +874,33 @@ function campoModal(name) {
     );
 }
 
-function botonModal(name) {
+function itemModal(name) {
   return new ModalBuilder()
-    .setCustomId(`tksetup_boton:${name}`)
-    .setTitle('Añadir botón')
+    .setCustomId(`tksetup_item:${name}`)
+    .setTitle('Añadir opción')
     .addComponents(
-      new ActionRowBuilder().addComponents(textInput('texto', 'Texto del botón', TextInputStyle.Short, '', 80, true)),
-      new ActionRowBuilder().addComponents(textInput('estilo', 'Estilo: azul, gris, verde o rojo', TextInputStyle.Short, 'azul', 10)),
-      new ActionRowBuilder().addComponents(textInput('emoji', 'Emoji (opcional)', TextInputStyle.Short, '', 32)),
+      new ActionRowBuilder().addComponents(textInput('titulo', 'Título', TextInputStyle.Short, '', 80, true)),
+      new ActionRowBuilder().addComponents(
+        textInput('descripcion', 'Descripción', TextInputStyle.Short, 'Abrir ticket', 100),
+      ),
+      new ActionRowBuilder().addComponents(
+        textInput('emoji', 'Emoji (servidor o unicode)', TextInputStyle.Short, '', 80),
+      ),
+      new ActionRowBuilder().addComponents(
+        textInput('categoria', 'ID categoría (opcional)', TextInputStyle.Short, '', 20),
+      ),
+      new ActionRowBuilder().addComponents(textInput('rol', 'ID rol extra (opcional)', TextInputStyle.Short, '', 20)),
+    );
+}
+
+function colorModal(panel) {
+  return new ModalBuilder()
+    .setCustomId(`tksetup_color_modal:${panel.name}`)
+    .setTitle('Color del embed')
+    .addComponents(
+      new ActionRowBuilder().addComponents(
+        textInput('color', 'HEX (#FF0000 o 0x7289DA)', TextInputStyle.Short, colorHex(panel.color), 10, true),
+      ),
     );
 }
 
@@ -776,17 +912,6 @@ function menuModal(name, current) {
       new ActionRowBuilder().addComponents(
         textInput('texto_menu', 'Texto del menú', TextInputStyle.Short, current, 150),
       ),
-    );
-}
-
-function opcionModal(name) {
-  return new ModalBuilder()
-    .setCustomId(`tksetup_opcion:${name}`)
-    .setTitle('Añadir opción')
-    .addComponents(
-      new ActionRowBuilder().addComponents(textInput('texto', 'Texto', TextInputStyle.Short, '', 100, true)),
-      new ActionRowBuilder().addComponents(textInput('descripcion', 'Descripción', TextInputStyle.Short, 'Abrir ticket', 100)),
-      new ActionRowBuilder().addComponents(textInput('emoji', 'Emoji (opcional)', TextInputStyle.Short, '', 32)),
     );
 }
 
@@ -871,8 +996,12 @@ async function fetchTicketHistory(channel) {
   };
 }
 
-async function openTicket(interaction, panel, reason) {
-  if (!panel.categoryId) {
+async function openTicket(interaction, panel, item) {
+  const reason = typeof item === 'string' ? item : item?.label || '';
+  const categoryId = (typeof item === 'object' && item?.categoryId) || panel.categoryId;
+  const extraRoleId = typeof item === 'object' ? item?.roleId : '';
+
+  if (!categoryId) {
     await interaction.reply({
       content: 'Este panel no tiene categoría. Un admin debe usar `/ticketsetup`.',
       ephemeral: true,
@@ -882,7 +1011,6 @@ async function openTicket(interaction, panel, reason) {
 
   const existing = interaction.guild.channels.cache.find(
     (channel) =>
-      channel.parentId === panel.categoryId &&
       channel.topic === `ticket:${panel.name}:${interaction.user.id}`,
   );
 
@@ -929,11 +1057,21 @@ async function openTicket(interaction, panel, reason) {
       ],
     });
   }
+  if (extraRoleId && /^\d{17,20}$/.test(extraRoleId) && !staffIds(panel).includes(extraRoleId)) {
+    overwrites.push({
+      id: extraRoleId,
+      allow: [
+        PermissionsBitField.Flags.ViewChannel,
+        PermissionsBitField.Flags.SendMessages,
+        PermissionsBitField.Flags.ReadMessageHistory,
+      ],
+    });
+  }
 
   const channel = await interaction.guild.channels.create({
     name: `ticket-${interaction.user.username}`.toLowerCase().replace(/[^a-z0-9-]/g, '').slice(0, 90),
     type: ChannelType.GuildText,
-    parent: panel.categoryId,
+    parent: categoryId,
     topic: `ticket:${panel.name}:${interaction.user.id}`,
     permissionOverwrites: overwrites,
   });
@@ -988,6 +1126,14 @@ async function handleTicketSlash(interaction) {
 async function handleTicketSetupSlash(interaction) {
   const { store } = guildStore(interaction.guildId);
   await interaction.reply(pickPayload(store));
+}
+
+async function handleTicketSetupPrefix(message) {
+  if (!message.member?.permissions.has(PermissionFlagsBits.ManageGuild)) {
+    await message.reply('Necesitas permiso de gestionar servidor.');
+    return;
+  }
+  await message.reply(pickPayload(guildStore(message.guildId).store));
 }
 
 function textInput(id, label, style, value, max = 4000, required = false) {
@@ -1126,7 +1272,7 @@ async function handleTicketInteraction(interaction) {
       await interaction.update({
         content: null,
         embeds: [panelEmbed(panel)],
-        components: [...panelComponents(panel), ticketActionRow()],
+        components: [...panelComponents(panel, { guild: interaction.guild }), ticketActionRow()],
       });
       return true;
     }
@@ -1179,24 +1325,41 @@ async function handleTicketInteraction(interaction) {
     return true;
   }
 
-  if (interaction.isModalSubmit() && interaction.customId.startsWith('tksetup_boton:')) {
+  if (interaction.isModalSubmit() && interaction.customId.startsWith('tksetup_item:')) {
     const panel = getPanel(interaction.guildId, interaction.customId.split(':')[1]);
     if (!panel) {
       await interaction.reply({ content: 'Ese panel ya no existe.', ephemeral: true });
       return true;
     }
-    if (panel.buttons.length >= 5) {
-      await interaction.reply({ content: 'Máximo 5 botones por panel.', ephemeral: true });
+    const max = panel.componentMode === 'buttons' ? 25 : 25;
+    if (panelItems(panel).length >= max) {
+      await interaction.reply({ content: 'Máximo 25 opciones.', ephemeral: true });
       return true;
     }
-    const style = (interaction.fields.getTextInputValue('estilo') || 'azul').toLowerCase().trim();
-    panel.buttons.push({
-      label: interaction.fields.getTextInputValue('texto'),
-      style: BUTTON_STYLES[style] ? style : 'azul',
+    const categoryId = interaction.fields.getTextInputValue('categoria').trim();
+    const roleId = interaction.fields.getTextInputValue('rol').trim();
+    panel.items.push({
+      label: interaction.fields.getTextInputValue('titulo'),
+      description: interaction.fields.getTextInputValue('descripcion') || 'Abrir ticket',
       emoji: interaction.fields.getTextInputValue('emoji') || '',
+      style: 'azul',
+      categoryId: /^\d{17,20}$/.test(categoryId) ? categoryId : '',
+      roleId: /^\d{17,20}$/.test(roleId) ? roleId : '',
     });
     savePanel(interaction.guildId, panel);
     await interaction.update(wizardPayload(panel, 7));
+    return true;
+  }
+
+  if (interaction.isModalSubmit() && interaction.customId.startsWith('tksetup_color_modal:')) {
+    const panel = getPanel(interaction.guildId, interaction.customId.split(':')[1]);
+    if (!panel) {
+      await interaction.reply({ content: 'Ese panel ya no existe.', ephemeral: true });
+      return true;
+    }
+    panel.color = parseColor(interaction.fields.getTextInputValue('color'));
+    savePanel(interaction.guildId, panel);
+    await interaction.update(wizardPayload(panel, 5));
     return true;
   }
 
@@ -1209,27 +1372,7 @@ async function handleTicketInteraction(interaction) {
     panel.dropdown.placeholder =
       interaction.fields.getTextInputValue('texto_menu') || panel.dropdown.placeholder;
     savePanel(interaction.guildId, panel);
-    await interaction.update(wizardPayload(panel, 8));
-    return true;
-  }
-
-  if (interaction.isModalSubmit() && interaction.customId.startsWith('tksetup_opcion:')) {
-    const panel = getPanel(interaction.guildId, interaction.customId.split(':')[1]);
-    if (!panel) {
-      await interaction.reply({ content: 'Ese panel ya no existe.', ephemeral: true });
-      return true;
-    }
-    if (panel.dropdown.options.length >= 25) {
-      await interaction.reply({ content: 'Máximo 25 opciones en el menú.', ephemeral: true });
-      return true;
-    }
-    panel.dropdown.options.push({
-      label: interaction.fields.getTextInputValue('texto'),
-      description: interaction.fields.getTextInputValue('descripcion') || 'Abrir ticket',
-      emoji: interaction.fields.getTextInputValue('emoji') || '',
-    });
-    savePanel(interaction.guildId, panel);
-    await interaction.update(wizardPayload(panel, 8));
+    await interaction.update(wizardPayload(panel, 7));
     return true;
   }
 
@@ -1312,35 +1455,91 @@ async function handleTicketInteraction(interaction) {
     return true;
   }
 
-  if (interaction.isButton() && interaction.customId.startsWith('tksetup_addbtn:')) {
+  if (interaction.isButton() && interaction.customId.startsWith('tksetup_mode_dd:')) {
     const panel = getPanel(interaction.guildId, interaction.customId.split(':')[1]);
     if (!panel) {
       await interaction.reply({ content: 'Ese panel ya no existe.', ephemeral: true });
       return true;
     }
-    await interaction.showModal(botonModal(panel.name));
-    return true;
-  }
-
-  if (interaction.isButton() && interaction.customId.startsWith('tksetup_clearbtn:')) {
-    const panel = getPanel(interaction.guildId, interaction.customId.split(':')[1]);
-    if (!panel) {
-      await interaction.reply({ content: 'Ese panel ya no existe.', ephemeral: true });
-      return true;
-    }
-    panel.buttons = [];
+    panel.componentMode = 'dropdown';
+    normalizePanel(panel);
     savePanel(interaction.guildId, panel);
     await interaction.update(wizardPayload(panel, 7));
     return true;
   }
 
-  if (interaction.isButton() && interaction.customId.startsWith('tksetup_addopt:')) {
+  if (interaction.isButton() && interaction.customId.startsWith('tksetup_mode_btn:')) {
     const panel = getPanel(interaction.guildId, interaction.customId.split(':')[1]);
     if (!panel) {
       await interaction.reply({ content: 'Ese panel ya no existe.', ephemeral: true });
       return true;
     }
-    await interaction.showModal(opcionModal(panel.name));
+    panel.componentMode = 'buttons';
+    normalizePanel(panel);
+    savePanel(interaction.guildId, panel);
+    await interaction.update(wizardPayload(panel, 7));
+    return true;
+  }
+
+  if (interaction.isButton() && interaction.customId.startsWith('tksetup_mode_reset:')) {
+    const panel = getPanel(interaction.guildId, interaction.customId.split(':')[1]);
+    if (!panel) {
+      await interaction.reply({ content: 'Ese panel ya no existe.', ephemeral: true });
+      return true;
+    }
+    panel.componentMode = null;
+    panel.items = [];
+    panel.buttons = [];
+    panel.dropdown = { placeholder: panel.dropdown?.placeholder || 'Selecciona una opción', options: [] };
+    savePanel(interaction.guildId, panel);
+    await interaction.update(wizardPayload(panel, 7));
+    return true;
+  }
+
+  if (interaction.isButton() && interaction.customId.startsWith('tksetup_additem:')) {
+    const panel = getPanel(interaction.guildId, interaction.customId.split(':')[1]);
+    if (!panel) {
+      await interaction.reply({ content: 'Ese panel ya no existe.', ephemeral: true });
+      return true;
+    }
+    await interaction.showModal(itemModal(panel.name));
+    return true;
+  }
+
+  if (interaction.isButton() && interaction.customId.startsWith('tksetup_clearitems:')) {
+    const panel = getPanel(interaction.guildId, interaction.customId.split(':')[1]);
+    if (!panel) {
+      await interaction.reply({ content: 'Ese panel ya no existe.', ephemeral: true });
+      return true;
+    }
+    panel.items = [];
+    panel.buttons = [];
+    if (panel.dropdown) panel.dropdown.options = [];
+    savePanel(interaction.guildId, panel);
+    await interaction.update(wizardPayload(panel, 7));
+    return true;
+  }
+
+  if (interaction.isStringSelectMenu() && interaction.customId.startsWith('tksetup_rmpick:')) {
+    const panel = getPanel(interaction.guildId, interaction.customId.split(':')[1]);
+    if (!panel) {
+      await interaction.reply({ content: 'Ese panel ya no existe.', ephemeral: true });
+      return true;
+    }
+    const index = Number(interaction.values[0]);
+    panel.items.splice(index, 1);
+    savePanel(interaction.guildId, panel);
+    await interaction.update(wizardPayload(panel, 7));
+    return true;
+  }
+
+  if (interaction.isButton() && interaction.customId.startsWith('tksetup_color:')) {
+    const panel = getPanel(interaction.guildId, interaction.customId.split(':')[1]);
+    if (!panel) {
+      await interaction.reply({ content: 'Ese panel ya no existe.', ephemeral: true });
+      return true;
+    }
+    await interaction.showModal(colorModal(panel));
     return true;
   }
 
@@ -1351,18 +1550,6 @@ async function handleTicketInteraction(interaction) {
       return true;
     }
     await interaction.showModal(menuModal(panel.name, panel.dropdown.placeholder));
-    return true;
-  }
-
-  if (interaction.isButton() && interaction.customId.startsWith('tksetup_clearmenu:')) {
-    const panel = getPanel(interaction.guildId, interaction.customId.split(':')[1]);
-    if (!panel) {
-      await interaction.reply({ content: 'Ese panel ya no existe.', ephemeral: true });
-      return true;
-    }
-    panel.dropdown = { placeholder: 'Selecciona una opción', options: [] };
-    savePanel(interaction.guildId, panel);
-    await interaction.update(wizardPayload(panel, 8));
     return true;
   }
 
@@ -1473,8 +1660,9 @@ async function handleTicketInteraction(interaction) {
     const [, name, index] = interaction.customId.split(':');
     const panel = getPanel(interaction.guildId, name);
     if (!panel) return true;
-    const button = panel.buttons[Number(index)];
-    await openTicket(interaction, panel, button?.label);
+    const items = panelItems(panel);
+    const button = items[Number(index)];
+    await openTicket(interaction, panel, button);
     return true;
   }
 
@@ -1482,8 +1670,8 @@ async function handleTicketInteraction(interaction) {
     const name = interaction.customId.split(':')[1];
     const panel = getPanel(interaction.guildId, name);
     if (!panel) return true;
-    const option = panel.dropdown.options[Number(interaction.values[0])];
-    await openTicket(interaction, panel, option?.label);
+    const option = panelItems(panel)[Number(interaction.values[0])];
+    await openTicket(interaction, panel, option);
     return true;
   }
 
@@ -1544,4 +1732,5 @@ module.exports = {
   ticketCommand,
   ticketSetupCommand,
   handleTicketInteraction,
+  handleTicketSetupPrefix,
 };
