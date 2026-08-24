@@ -30,8 +30,9 @@ if (/^\d{17,20}$/.test(token.trim())) {
 }
 
 const STATUS = 'KRONOS NETWORK | @KronosMC';
-const IP = 'kronosmcct.xyz';
-const BEDROCK_PORT = '25569';
+const JAVA_IP = 'kronosmcnetwork.tarohost.com';
+const BEDROCK_IP = 'kronosmcnetwork.tarohosting.com';
+const BEDROCK_PORT = '32778';
 const CLAIM_CODE = 'kronosmcCT';
 const GOLD = 0xE6B325;
 let botOnlineStatus = 'online';
@@ -86,11 +87,11 @@ function ipEmbed() {
     .addFields(
       {
         name: 'Java Edition',
-        value: `> **IP:** \`${IP}\`\n> Entra directo con la IP, sin puerto extra.`,
+        value: `> **IP:** \`${JAVA_IP}\`\n> Entra directo con la IP, sin puerto extra.`,
       },
       {
         name: 'Bedrock Edition',
-        value: `> **IP:** \`${IP}\`\n> **Puerto:** \`${BEDROCK_PORT}\``,
+        value: `> **IP:** \`${BEDROCK_IP}\`\n> **Puerto:** \`${BEDROCK_PORT}\``,
       },
     )
     .setFooter({ text: STATUS })
